@@ -1,0 +1,12 @@
+# AI Assistant Configuration
+
+## Content Generation Rules
+当为此知识库生成或编辑内容时，请遵守以下规则：
+
+1. 禁止使用emoji表情符号
+2. 使用简洁明了的文本表达
+3. 保持专业的文档风格
+4. 使用标准的Markdown格式
+
+## 说明
+此配置文件用于规范AI助手在此知识库中的内容生成行为。
