@@ -51,7 +51,7 @@ def test_with_your_api_key():
     try:
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key="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",
+            api_key="YOUR_API_KEY_HERE",  # 请设置你的OpenRouter API密钥
         )
         
         completion = client.chat.completions.create(

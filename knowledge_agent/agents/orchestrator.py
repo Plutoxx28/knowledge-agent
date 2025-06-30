@@ -9,6 +9,7 @@ from agents.structure_builder import StructureBuilder
 from agents.link_discoverer import LinkDiscoverer
 from utils.vector_db import LocalVectorDB
 from utils.text_processor import TextProcessor
+from utils.link_manager import LinkManager
 import logging
 import os
 
@@ -27,6 +28,9 @@ class KnowledgeOrchestrator(BaseAgent):
         
         # 初始化向量数据库
         self.vector_db = LocalVectorDB(vector_db_path)
+        
+        # 初始化链接管理器
+        self.link_manager = LinkManager(knowledge_base_path)
         
         # 初始化工作者Agents
         self.content_parser = ContentParser()
@@ -211,6 +215,18 @@ class KnowledgeOrchestrator(BaseAgent):
             
             # Step 5: 保存文件
             output_file = self._save_to_file(final_content, structure_result, doc_id)
+            
+            # Step 6: 更新链接数据库
+            if options.get("enable_linking", True):
+                logger.info("更新链接数据库...")
+                try:
+                    # 处理单个文档的链接更新
+                    self.link_manager._process_document(output_file)
+                    # 重新解析所有链接
+                    self.link_manager._resolve_all_links()
+                except Exception as e:
+                    logger.warning(f"更新链接数据库失败: {e}")
+                    result["errors"].append(f"链接数据库更新失败: {e}")
             
             # 组装结果
             result.update({

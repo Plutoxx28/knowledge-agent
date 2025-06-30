@@ -45,7 +45,7 @@ def test_knowledge_processing():
         # 创建OpenAI客户端
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key="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",
+            api_key="YOUR_API_KEY_HERE",  # 请设置你的OpenRouter API密钥
         )
         
         # 分析对话内容
@@ -150,7 +150,7 @@ def test_markdown_generation():
     try:
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key="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",
+            api_key="YOUR_API_KEY_HERE",  # 请设置你的OpenRouter API密钥
         )
         
         markdown_prompt = """请将以下内容整理成标准的知识笔记Markdown格式：
