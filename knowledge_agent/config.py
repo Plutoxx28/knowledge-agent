@@ -10,7 +10,10 @@ load_dotenv()
 class Settings:
     def __init__(self):
         # OpenRouter API配置
-        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "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")
+        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        if not self.openrouter_api_key:
+            raise ValueError("OPENROUTER_API_KEY环境变量未设置，请在.env文件中配置")
+        
         self.openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         self.model_name = os.getenv("MODEL_NAME", "google/gemini-2.5-pro")
         
@@ -26,7 +29,7 @@ class Settings:
         self.max_tokens_per_request = int(os.getenv("MAX_TOKENS_PER_REQUEST", "8000"))
         
         # 知识库配置
-        self.knowledge_base_path = os.getenv("KNOWLEDGE_BASE_PATH", "/Users/pluto/Desktop/知识库")
+        self.knowledge_base_path = os.getenv("KNOWLEDGE_BASE_PATH", "/Users/pluto/Desktop/知识库/知识库")
         self.output_format = os.getenv("OUTPUT_FORMAT", "markdown")
         self.concept_link_format = os.getenv("CONCEPT_LINK_FORMAT", "[[概念名]]")
 

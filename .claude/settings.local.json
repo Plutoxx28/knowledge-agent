@@ -8,7 +8,12 @@
       "Bash(rm:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(pip install:*)",
+      "Bash(pkill:*)",
+      "Bash(curl:*)",
+      "Bash(kill:*)",
+      "Bash(true)"
     ],
     "deny": []
   }

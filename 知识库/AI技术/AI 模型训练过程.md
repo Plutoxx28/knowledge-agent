@@ -1,3 +1,4 @@
+# AI模型训练过程
 
 大型语言模型(LLM)的训练流程通常分为三个关键阶段：pre-training -> post-training -> RL
 

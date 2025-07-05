@@ -7,11 +7,14 @@ import os
 import re
 import json
 import hashlib
+import logging
 from typing import Dict, List, Set, Optional, Tuple
 from dataclasses import dataclass, asdict
 from pathlib import Path
 import sqlite3
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -130,6 +133,53 @@ class LinkManager:
             stats['total_links'] = cursor.fetchone()[0]
         
         return stats
+    
+    def scan_knowledge_base_simple(self) -> Dict[str, int]:
+        """简化的知识库扫描，只更新文档信息，不处理复杂的链接关系"""
+        stats = {'scanned_files': 0, 'updated_files': 0}
+        
+        # 扫描所有Markdown文件
+        for md_file in self.knowledge_base_path.rglob("*.md"):
+            if self._should_process_file(md_file):
+                updated = self._process_document_simple(md_file)
+                stats['scanned_files'] += 1
+                if updated:
+                    stats['updated_files'] += 1
+        
+        return stats
+    
+    def _process_document_simple(self, doc_path: Path) -> bool:
+        """简化的文档处理，只更新基本信息"""
+        try:
+            with open(doc_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 计算文件哈希
+            file_hash = hashlib.md5(content.encode()).hexdigest()
+            
+            # 检查是否需要更新
+            if self._is_file_up_to_date(str(doc_path), file_hash):
+                return False
+            
+            # 提取文档标题
+            title = self._extract_title(content)
+            
+            # 更新数据库中的文档信息
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO documents 
+                    (doc_path, title, concepts, outbound_links, inbound_links, last_updated, file_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (str(doc_path), title, json.dumps([]), json.dumps([]), 
+                      json.dumps([]), datetime.now().isoformat(), file_hash))
+                conn.commit()
+            
+            return True
+            
+        except Exception as e:
+            print(f"处理文档 {doc_path} 时出错: {e}")
+            return False
     
     def _should_process_file(self, file_path: Path) -> bool:
         """判断是否应该处理该文件"""
@@ -488,7 +538,7 @@ class LinkManager:
         """查找概念对应的目标文档路径"""
         return self._find_target_document(concept_name)
     
-    def get_all_concepts(self) -> List[Dict[str, any]]:
+    def get_all_concepts(self, limit: int = 100, offset: int = 0) -> List[Dict[str, any]]:
         """获取所有概念及其统计信息"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -499,7 +549,8 @@ class LinkManager:
                 FROM concept_documents 
                 GROUP BY concept_name
                 ORDER BY reference_count DESC
-            ''')
+                LIMIT ? OFFSET ?
+            ''', (limit, offset))
             
             concepts = []
             for row in cursor.fetchall():
@@ -550,6 +601,284 @@ class LinkManager:
                 'orphaned_concepts': orphaned_concepts,
                 'orphaned_count': len(orphaned_concepts)
             }
+    
+    def get_all_documents(self, limit: int = 100, offset: int = 0) -> List[Dict[str, any]]:
+        """获取所有文档及其元数据"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT doc_path, title, concepts, outbound_links, 
+                       inbound_links, last_updated
+                FROM documents 
+                ORDER BY last_updated DESC
+            ''')
+            
+            documents = []
+            current_knowledge_base = str(self.knowledge_base_path)
+            processed_count = 0
+            
+            for row in cursor.fetchall():
+                doc_path, title, concepts_json, outbound_json, inbound_json, last_updated = row
+                
+                # 解析实际的文档路径
+                resolved_path = self._resolve_document_path(doc_path)
+                
+                # 只包含当前知识库路径下的文档，且文件确实存在
+                if not resolved_path.startswith(current_knowledge_base) or not os.path.exists(resolved_path):
+                    continue
+                
+                # 只处理md文件
+                if not resolved_path.lower().endswith('.md'):
+                    continue
+                
+                # 跳过offset数量的文档
+                if processed_count < offset:
+                    processed_count += 1
+                    continue
+                
+                # 达到limit数量时停止
+                if len(documents) >= limit:
+                    break
+                
+                # 解析JSON字段
+                try:
+                    concepts = json.loads(concepts_json) if concepts_json else []
+                    outbound_links = json.loads(outbound_json) if outbound_json else []
+                    inbound_links = json.loads(inbound_json) if inbound_json else []
+                except json.JSONDecodeError:
+                    concepts = []
+                    outbound_links = []
+                    inbound_links = []
+                
+                documents.append({
+                    'id': hashlib.md5(doc_path.encode()).hexdigest()[:12],
+                    'title': title or os.path.basename(resolved_path),
+                    'doc_path': resolved_path,  # 使用解析后的路径
+                    'concepts': concepts,
+                    'concept_count': len(concepts),
+                    'outbound_links': outbound_links,
+                    'inbound_links': inbound_links,
+                    'created_at': last_updated or datetime.now().isoformat(),
+                    'word_count': self._estimate_word_count(resolved_path)
+                })
+                processed_count += 1
+            
+            return documents
+    
+    def _resolve_document_path(self, doc_path: str) -> str:
+        """解析文档路径，处理旧路径到新路径的转换"""
+        # 如果文件已经存在，直接返回
+        if os.path.exists(doc_path):
+            return doc_path
+        
+        # 处理路径转换
+        # 将 /Users/yanglulu10/knowledge-agent/知识库/ 转换为 /Users/pluto/Desktop/知识库/知识库/
+        old_base = "/Users/yanglulu10/knowledge-agent/知识库/"
+        new_base = str(self.knowledge_base_path) + "/"
+        
+        if doc_path.startswith(old_base):
+            relative_path = doc_path[len(old_base):]
+            new_path = os.path.join(new_base, relative_path)
+            
+            # 检查新路径是否存在
+            if os.path.exists(new_path):
+                return new_path
+        
+        # 如果都不存在，尝试在知识库中查找相同的文件名
+        filename = os.path.basename(doc_path)
+        knowledge_base_path = str(self.knowledge_base_path)
+        
+        for root, dirs, files in os.walk(knowledge_base_path):
+            if filename in files:
+                potential_path = os.path.join(root, filename)
+                if os.path.exists(potential_path):
+                    return potential_path
+        
+        # 如果找不到，返回原路径（会导致过滤掉）
+        return doc_path
+    
+    def get_document_info(self, doc_id: str) -> Optional[Dict[str, any]]:
+        """获取特定文档的详细信息"""
+        documents = self.get_all_documents(limit=1000)
+        for doc in documents:
+            if doc['id'] == doc_id:
+                return doc
+        return None
+    
+    def get_concept_info(self, concept_name: str) -> Optional[Dict[str, any]]:
+        """获取特定概念的详细信息"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # 获取概念的基本信息
+            cursor.execute('''
+                SELECT doc_path, is_primary 
+                FROM concept_documents 
+                WHERE concept_name = ?
+            ''', (concept_name,))
+            
+            concept_docs = cursor.fetchall()
+            if not concept_docs:
+                return None
+            
+            # 获取相关链接
+            cursor.execute('''
+                SELECT source_doc, target_doc, line_number, context 
+                FROM concept_links 
+                WHERE concept_name = ?
+            ''', (concept_name,))
+            
+            links = cursor.fetchall()
+            
+            return {
+                'term': concept_name,
+                'documents': [{'doc_path': doc[0], 'is_primary': bool(doc[1])} for doc in concept_docs],
+                'links': [{'source_doc': link[0], 'target_doc': link[1], 'line_number': link[2], 'context': link[3]} for link in links],
+                'reference_count': len(concept_docs)
+            }
+    
+    def get_stats(self) -> Dict[str, any]:
+        """获取链接系统统计信息"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # 文档数量
+            cursor.execute('SELECT COUNT(*) FROM documents')
+            doc_count = cursor.fetchone()[0]
+            
+            # 概念数量
+            cursor.execute('SELECT COUNT(DISTINCT concept_name) FROM concept_documents')
+            concept_count = cursor.fetchone()[0]
+            
+            # 链接数量
+            cursor.execute('SELECT COUNT(*) FROM concept_links')
+            link_count = cursor.fetchone()[0]
+            
+            return {
+                'total_documents': doc_count,
+                'total_concepts': concept_count,
+                'total_links': link_count,
+                'last_updated': datetime.now().isoformat()
+            }
+    
+    def discover_links_for_document(self, doc_id: str, threshold: float = 0.7) -> List[Dict[str, any]]:
+        """为特定文档发现链接"""
+        doc_info = self.get_document_info(doc_id)
+        if not doc_info:
+            return []
+        
+        links = []
+        for concept in doc_info.get('concepts', []):
+            concept_info = self.get_concept_info(concept)
+            if concept_info:
+                links.append({
+                    'source': concept,
+                    'target': concept_info.get('term'),
+                    'type': 'concept_link',
+                    'strength': threshold,
+                    'confidence': 0.9
+                })
+        
+        return links
+    
+    def _estimate_word_count(self, doc_path: str) -> int:
+        """估算文档字数"""
+        try:
+            with open(doc_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', content))
+                english_words = len(re.findall(r'\b[a-zA-Z]+\b', content))
+                return chinese_chars + english_words
+        except:
+            return 0
+    
+    def remove_document(self, doc_path: str) -> bool:
+        """删除文档及其相关链接和概念
+        
+        Args:
+            doc_path: 要删除的文档路径
+            
+        Returns:
+            bool: 删除是否成功
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 删除相关的概念链接
+                cursor.execute('DELETE FROM concept_links WHERE source_doc = ?', (doc_path,))
+                deleted_links = cursor.rowcount
+                
+                # 删除概念-文档映射
+                cursor.execute('DELETE FROM concept_documents WHERE doc_path = ?', (doc_path,))
+                deleted_concepts = cursor.rowcount
+                
+                # 删除文档记录
+                cursor.execute('DELETE FROM documents WHERE doc_path = ?', (doc_path,))
+                deleted_docs = cursor.rowcount
+                
+                conn.commit()
+                
+                # 更新反向链接
+                self._update_inbound_links()
+                
+                logger.info(f"删除文档成功: {doc_path} (链接:{deleted_links}, 概念:{deleted_concepts}, 文档:{deleted_docs})")
+                return True
+                
+        except Exception as e:
+            logger.error(f"删除文档失败 {doc_path}: {e}")
+            return False
+    
+    def update_document_incremental(self, doc_path: Path) -> bool:
+        """增量更新单个文档
+        
+        Args:
+            doc_path: 文档路径
+            
+        Returns:
+            bool: 更新是否成功
+        """
+        try:
+            # 检查文件是否存在
+            if not doc_path.exists():
+                logger.warning(f"文件不存在: {doc_path}")
+                return False
+            
+            # 读取文件内容
+            with open(doc_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 计算文件哈希
+            file_hash = hashlib.md5(content.encode()).hexdigest()
+            
+            # 检查是否需要更新
+            if self._is_file_up_to_date(str(doc_path), file_hash):
+                logger.debug(f"文件无变化，跳过更新: {doc_path}")
+                return True
+            
+            # 提取文档信息
+            title = self._extract_title(content)
+            concept_links = self._extract_concept_links(content, str(doc_path))
+            defined_concepts = self._extract_defined_concepts(content)
+            
+            # 更新数据库
+            self._update_document_in_db(
+                doc_path=str(doc_path),
+                title=title,
+                defined_concepts=defined_concepts,
+                concept_links=concept_links,
+                file_hash=file_hash
+            )
+            
+            # 重新解析链接关系
+            self._resolve_all_links()
+            
+            logger.info(f"更新文档成功: {doc_path} (标题: {title})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"更新文档失败 {doc_path}: {e}")
+            return False
 
 
 def main():
@@ -594,6 +923,7 @@ def main():
             print(f"目标: {link.target_doc or '未找到'}")
             print(f"上下文: {link.context}")
             print()
+
 
 
 if __name__ == '__main__':

@@ -23,20 +23,79 @@ Lead Knowledge Organizer (主编排Agent)
 └── Vector DB (本地向量数据库)
 ```
 
-## 🚀 快速开始
+## 🚀 快速启动
 
-### 1. 环境准备
+### 系统要求
+
+- Python 3.8+
+- Node.js 16+
+- npm 或 yarn
+
+### 后端启动
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 进入后端目录
+cd knowledge_agent
 
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件，配置你的API密钥
+# 安装Python依赖（如果需要）
+pip3 install -r requirements.txt
+
+# 启动后端API服务器
+python3 run_api.py
 ```
 
-### 2. 基本使用
+**后端服务地址**：http://localhost:8000
+- API文档：http://localhost:8000/docs
+- 健康检查：http://localhost:8000/health
+
+### 前端启动
+
+```bash
+# 进入前端目录
+cd knowledge-agent-console-ui-main
+
+# 安装前端依赖（首次运行）
+npm install
+
+# 启动前端开发服务器
+npm run dev
+```
+
+**前端服务地址**：http://localhost:8080
+
+## 📋 API 联通状态
+
+### ✅ 后端API测试结果
+
+1. **健康检查** - `/health`
+   ```json
+   {
+     "status": "healthy",
+     "timestamp": "2025-07-05T16:52:48.929940",
+     "services": {
+       "orchestrator": true,
+       "vector_db": true,
+       "link_manager": true,
+       "progress_server": true
+     }
+   }
+   ```
+
+2. **文档处理** - `/process`
+   - ✅ 接收处理请求正常
+   - ✅ 返回结构化结果
+   - ⚠️ 向量数据库元数据格式需要调整
+
+3. **WebSocket进度推送** - `/ws/progress`
+   - ✅ 连接建立正常
+
+### ✅ 前端服务状态
+
+- ✅ Vite开发服务器运行正常 (端口8080)
+- ✅ React应用加载成功
+- ✅ UI界面可访问
+
+### 3. 基本使用
 
 ```python
 from agents.orchestrator import KnowledgeOrchestrator
@@ -59,7 +118,7 @@ if result["success"]:
     print(f"发现概念: {len(result['result']['concepts'])}个")
 ```
 
-### 3. 运行测试
+### 4. 运行测试
 
 ```bash
 python test_system.py

@@ -4,14 +4,14 @@
 import uuid
 import asyncio
 from typing import Dict, List, Any, Optional, Callable
-from .base_agent import BaseAgent
-from .content_parser import ContentParser
-from .structure_builder import StructureBuilder
-from .link_discoverer import LinkDiscoverer
-from ..utils.vector_db import LocalVectorDB
-from ..utils.text_processor import TextProcessor
-from ..utils.link_manager import LinkManager
-from ..utils.progress_websocket import create_progress_callback, ProgressBroadcaster
+from agents.base_agent import BaseAgent
+from agents.content_parser import ContentParser
+from agents.structure_builder import StructureBuilder
+from agents.link_discoverer import LinkDiscoverer
+from utils.vector_db import LocalVectorDB
+from utils.text_processor import TextProcessor
+from utils.link_manager import LinkManager
+from utils.progress_websocket import create_progress_callback, ProgressBroadcaster
 import logging
 import os
 from enum import Enum
