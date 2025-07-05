@@ -5,15 +5,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Spinner } from '@/components/ui/spinner';
 import { StatCard } from '@/components/ui/stat-card';
 import { TagInput } from '@/components/ui/tag-input';
-import { Play, X, Settings, Hash, Link, Clock, Star, Save, Copy, Download, ExternalLink, ChevronDown, ChevronRight, Upload, FileText, MessageSquare, Globe } from 'lucide-react';
+import { Play, X, Hash, Link, Clock, Star, Save, Copy, Download, ExternalLink, ChevronRight, Upload, FileText, MessageSquare, Globe } from 'lucide-react';
 import { apiClient, progressWebSocket, formatError, type ProcessingOptions, type ProcessingResponse } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 interface ProcessingResult {
@@ -30,7 +27,6 @@ const ProcessingHub = () => {
   const [content, setContent] = useState('');
   const [metadata, setMetadata] = useState({
     source: '',
-    topic: '',
     tags: [] as string[]
   });
   const [options, setOptions] = useState<ProcessingOptions>({
@@ -71,122 +67,201 @@ const ProcessingHub = () => {
         type: inputMode,
         metadata: {
           source: metadata.source || 'user_input',
-          topic: metadata.topic,
           tags: metadata.tags,
           timestamp: new Date().toISOString()
         },
         options: options
       };
 
-      // 连接WebSocket接收进度更新
-      const ws = new WebSocket('ws://localhost:8000/ws/progress');
-      let currentProgressStep = 0;
+      let ws: WebSocket | null = null;
       
-      ws.onopen = () => {
-        console.log('WebSocket连接已建立');
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const progressData = JSON.parse(event.data);
-          console.log('收到进度更新:', progressData);
+      try {
+        // 连接WebSocket接收进度更新
+        ws = new WebSocket('ws://localhost:8000/ws/progress');
+        
+        await new Promise<void>((resolve, reject) => {
+          ws!.onopen = () => {
+            console.log('WebSocket连接已建立');
+            resolve();
+          };
           
-          // 更新当前状态
-          if (progressData.message) {
-            setCurrentStatus(progressData.message);
-          }
+          ws!.onerror = (error) => {
+            console.error('WebSocket连接失败:', error);
+            reject(error);
+          };
           
-          // 更新进度百分比
-          if (progressData.step !== undefined) {
-            const progressPercentage = (progressData.step / 5) * 100;
-            setProgress(progressPercentage);
-          }
-          
-          // 更新处理步骤状态
-          setProcessingSteps(prevSteps => {
-            const newSteps = [...prevSteps];
+          // 设置超时
+          setTimeout(() => reject(new Error('WebSocket连接超时')), 5000);
+        });
+        
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            console.log('收到WebSocket消息:', message);
             
-            // 根据进度数据更新步骤状态
-            if (progressData.stage) {
-              const stepIndex = newSteps.findIndex(step => step.step === progressData.stage);
-              if (stepIndex !== -1) {
-                newSteps[stepIndex] = {
-                  ...newSteps[stepIndex],
-                  status: 'processing',
-                  message: progressData.message || newSteps[stepIndex].message
-                };
+            // 检查消息类型和数据结构
+            if (message.type === 'progress_update' && message.data) {
+              const progressData = message.data;
+              console.log('解析进度数据:', progressData);
+              
+              // 更新当前状态
+              if (progressData.current_step) {
+                setCurrentStatus(progressData.current_step);
+              }
+              
+              // 更新进度百分比
+              if (progressData.progress_percent !== undefined) {
+                setProgress(progressData.progress_percent);
+              } else if (progressData.completed_steps !== undefined && progressData.total_steps > 0) {
+                const progressPercentage = (progressData.completed_steps / progressData.total_steps) * 100;
+                setProgress(progressPercentage);
+              }
+              
+              // 更新处理步骤状态
+              setProcessingSteps(prevSteps => {
+                const newSteps = [...prevSteps];
                 
-                // 将之前的步骤标记为完成
-                for (let i = 0; i < stepIndex; i++) {
-                  if (newSteps[i].status !== 'completed') {
-                    newSteps[i].status = 'completed';
+                // 根据进度数据更新步骤状态
+                if (progressData.stage) {
+                  const stepIndex = newSteps.findIndex(step => step.step === progressData.stage);
+                  if (stepIndex !== -1) {
+                    newSteps[stepIndex] = {
+                      ...newSteps[stepIndex],
+                      status: 'processing',
+                      message: progressData.current_step || newSteps[stepIndex].message
+                    };
+                    
+                    // 将之前的步骤标记为完成
+                    for (let i = 0; i < stepIndex; i++) {
+                      if (newSteps[i].status !== 'completed') {
+                        newSteps[i].status = 'completed';
+                      }
+                    }
                   }
                 }
-              }
+                
+                return newSteps;
+              });
             }
             
+          } catch (err) {
+            console.error('解析WebSocket消息失败:', err);
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket错误:', error);
+        };
+        
+        ws.onclose = () => {
+          console.log('WebSocket连接已关闭');
+        };
+
+        // 发送处理请求
+        const response: ProcessingResponse = await apiClient.processContent(requestData);
+        
+        if (response.success) {
+          // 处理成功，标记所有步骤为完成
+          setProcessingSteps(prevSteps => 
+            prevSteps.map(step => ({ ...step, status: 'completed' as const }))
+          );
+          setCurrentStatus('处理完成！');
+          setProgress(100);
+          
+          setResult({
+            content: response.result?.structured_content || response.result?.content || '处理完成',
+            statistics: response.statistics || {
+              conceptCount: 0,
+              internalLinks: 0,
+              processingTime: 0,
+              qualityScore: 0
+            }
+          });
+          
+          toast({
+            title: "处理成功",
+            description: response.message || "内容已成功处理",
+          });
+        } else {
+          // 处理失败
+          throw new Error(response.errors?.join(', ') || '处理失败');
+        }
+        
+      } catch (err) {
+        // 如果WebSocket连接失败，仍然尝试处理请求（降级处理）
+        if (err instanceof Error && err.message.includes('WebSocket')) {
+          console.warn('WebSocket连接失败，继续处理请求（无实时进度）');
+          try {
+            const response: ProcessingResponse = await apiClient.processContent(requestData);
+            
+            if (response.success) {
+              setProcessingSteps(prevSteps => 
+                prevSteps.map(step => ({ ...step, status: 'completed' as const }))
+              );
+              setCurrentStatus('处理完成！');
+              setProgress(100);
+              
+              setResult({
+                content: response.result?.structured_content || response.result?.content || '处理完成',
+                statistics: response.statistics || {
+                  conceptCount: 0,
+                  internalLinks: 0,
+                  processingTime: 0,
+                  qualityScore: 0
+                }
+              });
+              
+              toast({
+                title: "处理成功",
+                description: response.message || "内容已成功处理（无实时进度）",
+              });
+              return;
+            } else {
+              throw new Error(response.errors?.join(', ') || '处理失败');
+            }
+          } catch (apiErr) {
+            const errorMessage = formatError(apiErr);
+            setError(errorMessage);
+            setCurrentStatus('处理失败');
+            
+            toast({
+              title: "处理失败",
+              description: errorMessage,
+              variant: "destructive",
+            });
+          }
+        } else {
+          const errorMessage = formatError(err);
+          setError(errorMessage);
+          setCurrentStatus('处理失败');
+          
+          // 标记当前处理步骤为错误状态
+          setProcessingSteps(prevSteps => {
+            const newSteps = [...prevSteps];
+            const processingIndex = newSteps.findIndex(step => step.status === 'processing');
+            if (processingIndex !== -1) {
+              newSteps[processingIndex].status = 'error';
+            }
             return newSteps;
           });
           
-        } catch (err) {
-          console.error('解析进度数据失败:', err);
+          toast({
+            title: "处理失败",
+            description: errorMessage,
+            variant: "destructive",
+          });
         }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket错误:', error);
-      };
-      
-      ws.onclose = () => {
-        console.log('WebSocket连接已关闭');
-      };
-
-      // 发送处理请求
-      const response: ProcessingResponse = await apiClient.processContent(requestData);
-      
-      // 关闭WebSocket连接
-      ws.close();
-      
-      if (response.success) {
-        // 处理成功，标记所有步骤为完成
-        setProcessingSteps(prevSteps => 
-          prevSteps.map(step => ({ ...step, status: 'completed' as const }))
-        );
-        setCurrentStatus('处理完成！');
-        setProgress(100);
-        
-        setResult({
-          content: response.result?.structured_content || response.result?.content || '处理完成',
-          statistics: response.statistics || {
-            conceptCount: 0,
-            internalLinks: 0,
-            processingTime: 0,
-            qualityScore: 0
-          }
-        });
-        
-        toast({
-          title: "处理成功",
-          description: response.message || "内容已成功处理",
-        });
-      } else {
-        // 处理失败
-        throw new Error(response.errors?.join(', ') || '处理失败');
+      } finally {
+        // 确保关闭WebSocket连接
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
       }
-    } catch (err) {
-      const errorMessage = formatError(err);
+    } catch (outerErr) {
+      console.error('处理过程发生错误:', outerErr);
+      const errorMessage = formatError(outerErr);
       setError(errorMessage);
       setCurrentStatus('处理失败');
-      
-      // 标记当前处理步骤为错误状态
-      setProcessingSteps(prevSteps => {
-        const newSteps = [...prevSteps];
-        const processingIndex = newSteps.findIndex(step => step.status === 'processing');
-        if (processingIndex !== -1) {
-          newSteps[processingIndex].status = 'error';
-        }
-        return newSteps;
-      });
       
       toast({
         title: "处理失败",
@@ -201,23 +276,16 @@ const ProcessingHub = () => {
     setContent('');
     setMetadata({
       source: '',
-      topic: '',
       tags: []
     });
     setResult(null);
     setError(null);
     setProgress(0);
     setCurrentStatus('');
-    setProcessingSteps([]);
-  };
-  const handleCheckboxChange = (field: keyof ProcessingOptions) => (checked: boolean) => {
-    setOptions(prev => ({
-      ...prev,
-      [field]: checked
-    }));
-  };
+          setProcessingSteps([]);
+    };
 
-  const handleFileUpload = async (file: File) => {
+    const handleFileUpload = async (file: File) => {
     if (!file) return;
     
     const allowedTypes = ['.md', '.txt', '.doc', '.docx'];
@@ -306,7 +374,8 @@ const ProcessingHub = () => {
       setProcessing(false);
     }
   };
-  return <div className="space-y-6">
+  return (
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">处理中心</h1>
@@ -400,63 +469,13 @@ const ProcessingHub = () => {
               </TabsContent>
             </Tabs>
 
-            {/* 处理配置 */}
-            <Collapsible>
-              <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:text-blue-600">
-                <Settings className="h-4 w-4" />
-                处理配置
-                <ChevronDown className="h-4 w-4" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-3 space-y-4 border-t pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium">处理策略</Label>
-                    <Select value={options.strategy} onValueChange={value => setOptions(prev => ({
-                    ...prev,
-                    strategy: value as any
-                  }))}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="standard">标准处理</SelectItem>
-                        <SelectItem value="hierarchical">层次化处理</SelectItem>
-                        <SelectItem value="streaming">流式处理</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox id="linking" checked={options.enableLinking} onCheckedChange={handleCheckboxChange('enableLinking')} />
-                      <Label htmlFor="linking" className="text-sm">启用概念链接</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox id="summary" checked={options.generateSummary} onCheckedChange={handleCheckboxChange('generateSummary')} />
-                      <Label htmlFor="summary" className="text-sm">生成摘要</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox id="concepts" checked={options.extractConcepts} onCheckedChange={handleCheckboxChange('extractConcepts')} />
-                      <Label htmlFor="concepts" className="text-sm">提取概念</Label>
-                    </div>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
             {/* 元数据输入 */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-sm font-medium">来源</Label>
                 <Input placeholder="内容来源" className="mt-1" value={metadata.source} onChange={e => setMetadata(prev => ({
                 ...prev,
                 source: e.target.value
-              }))} />
-              </div>
-              <div>
-                <Label className="text-sm font-medium">主题</Label>
-                <Input placeholder="主题分类" className="mt-1" value={metadata.topic} onChange={e => setMetadata(prev => ({
-                ...prev,
-                topic: e.target.value
               }))} />
               </div>
               <div>
@@ -621,6 +640,7 @@ const ProcessingHub = () => {
             </CardContent>
           </Card>}
       </div>
-    </div>;
+    </div>
+  );
 };
 export default ProcessingHub;

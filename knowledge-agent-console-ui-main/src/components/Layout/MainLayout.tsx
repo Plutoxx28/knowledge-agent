@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Brain, Database, GitBranch, Settings, Menu } from 'lucide-react';
+import { Brain, Database, GitBranch, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface MainLayoutProps {
@@ -20,10 +20,6 @@ const navigation = [{
   name: '概念图谱',
   href: '/concept-graph',
   icon: GitBranch
-}, {
-  name: '设置',
-  href: '/settings',
-  icon: Settings
 }];
 
 export function MainLayout({

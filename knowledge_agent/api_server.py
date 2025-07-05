@@ -166,15 +166,19 @@ async def startup_event():
         )
         logger.info("链接管理器初始化完成")
         
-        # 初始化知识编排器
-        orchestrator = KnowledgeOrchestrator(
-            knowledge_base_path=settings.knowledge_base_path
-        )
-        logger.info("知识编排器初始化完成")
-        
         # 初始化 WebSocket 进度服务器
         progress_server = ProgressWebSocketServer()
         logger.info("WebSocket 进度服务器初始化完成")
+        
+        # 初始化知识编排器 - 传入WebSocket服务器实例
+        from utils.progress_websocket import ProgressBroadcaster
+        progress_broadcaster = ProgressBroadcaster(progress_server)
+        
+        orchestrator = KnowledgeOrchestrator(
+            knowledge_base_path=settings.knowledge_base_path,
+            progress_callback=progress_broadcaster
+        )
+        logger.info("知识编排器初始化完成")
         
         # 初始化文件监控器
         def file_change_callback(change_info):

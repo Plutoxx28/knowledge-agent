@@ -6,10 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Search, RefreshCw, MoreHorizontal, Eye, Edit, Link, Trash, FileText, Download, Tag, FolderOpen, TrendingUp, Activity, Loader2 } from 'lucide-react';
+import { Search, RefreshCw, Link, Trash, FileText, Download, Tag, FolderOpen, TrendingUp, Activity, Loader2 } from 'lucide-react';
 import { StatCard } from '@/components/ui/stat-card';
 import { apiClient, formatError } from '@/lib/api';
 
@@ -309,16 +309,14 @@ const KnowledgeBase = () => {
                     </div>
                   </TableHead>
                   <TableHead className="font-semibold text-gray-700 py-6">文档信息</TableHead>
-                  <TableHead className="font-semibold text-gray-700 py-6">分类标签</TableHead>
-                  <TableHead className="font-semibold text-gray-700 py-6">概念关联</TableHead>
                   <TableHead className="font-semibold text-gray-700 py-6">更新时间</TableHead>
-                  <TableHead className="w-24 font-semibold text-gray-700 py-6">操作</TableHead>
+                  <TableHead className="w-24 font-semibold text-gray-700 py-6 text-center">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center">
+                    <TableCell colSpan={4} className="py-12 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         <span className="text-gray-500">加载中...</span>
@@ -327,7 +325,7 @@ const KnowledgeBase = () => {
                   </TableRow>
                 ) : (filteredDocuments.length > 0 ? filteredDocuments : documents).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center">
+                    <TableCell colSpan={4} className="py-12 text-center">
                       <div className="text-gray-500">
                         {filteredDocuments.length === 0 && searchQuery ? '没有找到匹配的文档' : '暂无文档数据'}
                       </div>
@@ -360,85 +358,45 @@ const KnowledgeBase = () => {
                               <Link className="w-3 h-3" />
                               {doc.concept_count || 0} 个概念
                             </span>
+                            {doc.category && (
+                              <span className="flex items-center gap-1">
+                                <Tag className="w-3 h-3" />
+                                {doc.category}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="py-6">
-                      <Badge variant="secondary" className="bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 border-blue-200/50 rounded-xl px-3 py-1">
-                        {doc.category || '未分类'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="py-6">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-gradient-to-br from-purple-500/10 to-violet-500/10 rounded-xl flex items-center justify-center border border-purple-200/30">
-                          <span className="text-sm font-semibold text-purple-700">
-                            {doc.concept_count || 0}
-                          </span>
-                        </div>
-                        <span className="text-sm text-gray-600">个概念</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-6">
                       <span className="text-sm text-gray-600">{formatDate(doc.created_at)}</span>
                     </TableCell>
-                    <TableCell className="py-6">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-xl hover:bg-blue-100/50">
-                            <MoreHorizontal className="w-4 h-4" />
+                    <TableCell className="py-6 text-center">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl">
+                            <Trash className="w-4 h-4 mr-2" />
+                            删除文档
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="rounded-2xl">
-                          <DropdownMenuItem 
-                            className="rounded-xl"
-                            onClick={() => navigate(`/document/${doc.id}`)}
-                          >
-                            <Eye className="w-4 h-4 mr-2" />
-                            查看详情
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="rounded-xl"
-                            onClick={() => navigate(`/document/${doc.id}`)}
-                          >
-                            <Edit className="w-4 h-4 mr-2" />
-                            编辑文档
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="rounded-xl">
-                            <Link className="w-4 h-4 mr-2" />
-                            概念链接
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <DropdownMenuItem 
-                                className="text-red-600 rounded-xl"
-                                onSelect={(e) => e.preventDefault()}
-                              >
-                                <Trash className="w-4 h-4 mr-2" />
-                                删除文档
-                              </DropdownMenuItem>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent className="rounded-2xl">
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>确认删除</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  你确定要删除文档 "{doc.title}" 吗？此操作无法撤销。
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel className="rounded-xl">取消</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  className="rounded-xl bg-red-500 hover:bg-red-600"
-                                  onClick={() => handleDeleteDocument(doc.id, doc.title)}
-                                >
-                                  删除
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="rounded-2xl">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>确认删除</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              你确定要删除文档 "{doc.title}" 吗？此操作无法撤销。
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="rounded-xl">取消</AlertDialogCancel>
+                            <AlertDialogAction 
+                              className="rounded-xl bg-red-500 hover:bg-red-600"
+                              onClick={() => handleDeleteDocument(doc.id, doc.title)}
+                            >
+                              删除
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>)}
               </TableBody>

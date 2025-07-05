@@ -20,6 +20,7 @@ class ProgressWebSocketServer:
         self.host = host
         self.port = port
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
+        self.connections: Set[websockets.WebSocketServerProtocol] = set()  # 为了兼容性
         self.task_progress: Dict[str, Dict[str, Any]] = {}
         self.server = None
         self.running = False
@@ -27,6 +28,7 @@ class ProgressWebSocketServer:
     async def register_client(self, websocket: websockets.WebSocketServerProtocol):
         """注册新的客户端连接"""
         self.clients.add(websocket)
+        self.connections.add(websocket)
         client_id = id(websocket)
         logger.info(f"客户端 {client_id} 已连接")
         
@@ -41,8 +43,22 @@ class ProgressWebSocketServer:
     async def unregister_client(self, websocket: websockets.WebSocketServerProtocol):
         """注销客户端连接"""
         self.clients.discard(websocket)
+        self.connections.discard(websocket)
         client_id = id(websocket)
         logger.info(f"客户端 {client_id} 已断开")
+    
+    async def add_connection(self, websocket):
+        """添加WebSocket连接（FastAPI兼容方法）"""
+        await self.register_client(websocket)
+        self.connections.add(websocket)
+    
+    async def remove_connection(self, websocket):
+        """移除WebSocket连接（FastAPI兼容方法）"""
+        await self.unregister_client(websocket)
+    
+    async def broadcast(self, message):
+        """广播消息到所有连接（兼容方法）"""
+        await self.broadcast_progress(message)
     
     async def send_to_client(self, websocket: websockets.WebSocketServerProtocol, message: Dict[str, Any]):
         """向单个客户端发送消息"""
@@ -56,6 +72,7 @@ class ProgressWebSocketServer:
     async def broadcast_progress(self, progress_data: Dict[str, Any]):
         """广播进度更新到所有客户端"""
         if not self.clients:
+            logger.warning("没有连接的客户端，跳过进度广播")
             return
             
         task_id = progress_data.get("task_id")
@@ -68,13 +85,20 @@ class ProgressWebSocketServer:
             "timestamp": time.time()
         }
         
+        logger.info(f"广播进度更新给 {len(self.clients)} 个客户端: {progress_data.get('current_step', 'unknown')}")
+        
         # 并发发送给所有客户端
-        await asyncio.gather(
+        results = await asyncio.gather(
             *[self.send_to_client(client, message) for client in self.clients.copy()],
             return_exceptions=True
         )
         
-        logger.debug(f"进度更新已广播给 {len(self.clients)} 个客户端")
+        # 检查发送结果
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"发送给客户端 {i} 失败: {result}")
+        
+        logger.info(f"进度更新已广播给 {len(self.clients)} 个客户端")
     
     async def handle_client_message(self, websocket: websockets.WebSocketServerProtocol, message: str):
         """处理客户端消息"""
@@ -209,6 +233,10 @@ class ProgressBroadcaster:
         """进度回调函数"""
         try:
             progress_data = progress.to_dict()
+            
+            # 记录进度数据用于调试
+            logger.info(f"[{progress.task_id[:8]}] 发送进度更新: {progress.current_step} "
+                      f"({progress.completed_steps}/{progress.total_steps}) - 客户端数量: {len(self.ws_server.clients)}")
             
             # 同步广播进度
             broadcast_progress_sync(progress_data)

@@ -82,11 +82,14 @@ class LocalVectorDB:
             # 生成嵌入向量
             embedding = self.encoder.encode(content).tolist()
             
+            # 清理metadata，只保留简单数据类型
+            clean_metadata = self._clean_metadata(metadata)
+            
             # 添加到知识库集合
             self.knowledge_collection.add(
                 embeddings=[embedding],
                 documents=[content],
-                metadatas=[metadata],
+                metadatas=[clean_metadata],
                 ids=[doc_id]
             )
             
@@ -96,6 +99,25 @@ class LocalVectorDB:
         except Exception as e:
             logger.error(f"添加文档失败: {e}")
             raise
+    
+    def _clean_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """清理metadata，只保留ChromaDB支持的数据类型"""
+        clean_meta = {}
+        
+        for key, value in metadata.items():
+            if isinstance(value, (str, int, float, bool)):
+                clean_meta[key] = value
+            elif isinstance(value, list):
+                # 将列表转换为字符串
+                clean_meta[key] = ', '.join(str(item) for item in value)
+            elif isinstance(value, dict):
+                # 将字典转换为JSON字符串
+                clean_meta[key] = str(value)
+            else:
+                # 其他类型转换为字符串
+                clean_meta[key] = str(value)
+        
+        return clean_meta
     
     def add_concepts(self, concepts: List[Dict[str, Any]], doc_id: str):
         """
