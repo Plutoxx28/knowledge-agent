@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import traceback
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -36,6 +37,7 @@ try:
     from utils.file_watcher import create_file_watcher
     from utils.link_renderer import ConceptGraphGenerator
     from config import Settings
+    from simple_processor import SimpleKnowledgeProcessor
     FULL_MODE = True
 except ImportError as e:
     print(f"警告：无法导入完整的Agent组件: {e}")
@@ -68,8 +70,11 @@ app.add_middleware(
 orchestrator = None
 vector_db = None
 link_manager = None
-progress_server = None
 file_watcher = None
+simple_processor = None
+
+# 简化的WebSocket连接管理
+active_websocket_connections = set()
 
 # Pydantic 模型定义
 class ProcessingOptions(BaseModel):
@@ -140,11 +145,82 @@ class ConceptGraphResponse(BaseModel):
     total_concepts: int
     total_links: int
 
+# 简化的进度广播函数
+async def broadcast_progress(progress_data: Dict[str, Any]):
+    """向所有WebSocket连接广播进度更新"""
+    global active_websocket_connections
+    
+    if not active_websocket_connections:
+        logger.info("没有活跃的WebSocket连接，跳过广播")
+        return
+    
+    message = {
+        "type": "progress_update",
+        "data": progress_data,
+        "timestamp": time.time()
+    }
+    
+    logger.info(f"📡 广播进度更新给 {len(active_websocket_connections)} 个客户端: {progress_data.get('current_step', 'unknown')}")
+    
+    # 并发发送给所有客户端
+    disconnected_connections = set()
+    for websocket in active_websocket_connections.copy():
+        try:
+            await websocket.send_text(json.dumps(message, ensure_ascii=False))
+            logger.info(f"✅ 成功发送消息到WebSocket")
+        except Exception as e:
+            logger.error(f"❌ 发送WebSocket消息失败: {e}")
+            disconnected_connections.add(websocket)
+    
+    # 清理断开的连接
+    active_websocket_connections -= disconnected_connections
+    logger.info(f"📊 WebSocket广播完成，剩余连接: {len(active_websocket_connections)}")
+
+# 简化的进度回调类
+class SimpleProgressCallback:
+    """简化的进度回调"""
+    
+    def __call__(self, progress):
+        """进度回调函数"""
+        try:
+            logger.info(f"🎯 SimpleProgressCallback被调用！")
+            progress_data = progress.to_dict()
+            
+            # 记录进度数据用于调试
+            logger.info(f"📊 [{progress.task_id[:8]}] 发送进度更新: {progress.current_step} "
+                      f"({progress.completed_steps}/{progress.total_steps}) - 客户端数量: {len(active_websocket_connections)}")
+            logger.info(f"📊 进度数据: {progress_data}")
+            
+            # 同步广播进度 - 使用asyncio.create_task在事件循环中运行
+            try:
+                loop = asyncio.get_event_loop()
+                logger.info(f"🔄 获取事件循环成功，正在运行: {loop.is_running()}")
+                if loop.is_running():
+                    task = asyncio.create_task(broadcast_progress(progress_data))
+                    logger.info(f"📤 创建广播任务: {task}")
+                else:
+                    logger.info(f"📤 事件循环未运行，直接运行广播")
+                    loop.run_until_complete(broadcast_progress(progress_data))
+            except RuntimeError as e:
+                logger.warning(f"⚠️ 事件循环异常: {e}，尝试创建新的")
+                # 如果没有事件循环，尝试创建新的
+                asyncio.run(broadcast_progress(progress_data))
+            
+            # 记录关键进度点
+            if progress.stage.value in ["analyzing", "generating_workers", "completed"]:
+                logger.info(f"🎯 [{progress.task_id[:8]}] {progress.current_step} "
+                          f"({progress.completed_steps}/{progress.total_steps})")
+            
+        except Exception as e:
+            logger.error(f"❌ 广播进度失败: {e}")
+            import traceback
+            logger.error(f"❌ 错误堆栈: {traceback.format_exc()}")
+
 # 启动时初始化
 @app.on_event("startup")
 async def startup_event():
     """应用启动时初始化组件"""
-    global orchestrator, vector_db, link_manager, progress_server, file_watcher
+    global orchestrator, vector_db, link_manager, file_watcher, simple_processor
     
     logger.info("正在初始化 Knowledge Agent API 服务器...")
     
@@ -156,6 +232,10 @@ async def startup_event():
         # 初始化配置
         settings = Settings()
         
+        # 初始化简化处理器 - 新的主要处理器
+        simple_processor = SimpleKnowledgeProcessor(broadcast_progress)
+        logger.info("简化知识处理器初始化完成")
+        
         # 初始化向量数据库
         vector_db = LocalVectorDB()
         logger.info("向量数据库初始化完成")
@@ -166,17 +246,12 @@ async def startup_event():
         )
         logger.info("链接管理器初始化完成")
         
-        # 初始化 WebSocket 进度服务器
-        progress_server = ProgressWebSocketServer()
-        logger.info("WebSocket 进度服务器初始化完成")
-        
-        # 初始化知识编排器 - 传入WebSocket服务器实例
-        from utils.progress_websocket import ProgressBroadcaster
-        progress_broadcaster = ProgressBroadcaster(progress_server)
+        # 初始化知识编排器 - 作为备用
+        progress_callback = SimpleProgressCallback()
         
         orchestrator = KnowledgeOrchestrator(
             knowledge_base_path=settings.knowledge_base_path,
-            progress_callback=progress_broadcaster
+            progress_callback=progress_callback
         )
         logger.info("知识编排器初始化完成")
         
@@ -185,8 +260,8 @@ async def startup_event():
             """文件变化回调函数"""
             logger.info(f"文件变化通知: {change_info}")
             # 可以通过WebSocket通知前端
-            if progress_server and progress_server.connections:
-                asyncio.create_task(progress_server.broadcast(change_info))
+            if active_websocket_connections:
+                asyncio.create_task(broadcast_progress(change_info))
         
         file_watcher = create_file_watcher(
             knowledge_base_path=settings.knowledge_base_path,
@@ -207,7 +282,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时清理资源"""
-    global progress_server, file_watcher
+    global file_watcher
     
     logger.info("正在关闭 Knowledge Agent API 服务器...")
     
@@ -215,8 +290,13 @@ async def shutdown_event():
         file_watcher.stop()
         logger.info("文件监控器已停止")
     
-    if progress_server:
-        await progress_server.shutdown()
+    # 关闭所有WebSocket连接
+    for websocket in active_websocket_connections.copy():
+        try:
+            await websocket.close()
+        except:
+            pass
+    active_websocket_connections.clear()
     
     logger.info("Knowledge Agent API 服务器已关闭")
 
@@ -239,10 +319,10 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "services": {
+            "simple_processor": simple_processor is not None,
             "orchestrator": orchestrator is not None,
             "vector_db": vector_db is not None,
             "link_manager": link_manager is not None,
-            "progress_server": progress_server is not None,
             "file_watcher": file_watcher is not None and file_watcher.is_running if file_watcher else False
         }
     }
@@ -310,35 +390,33 @@ async def rescan_knowledge_base():
 async def process_content(request: ProcessingRequest):
     """处理内容"""
     try:
-        if not orchestrator:
-            raise HTTPException(status_code=500, detail="编排器未初始化")
+        if not simple_processor:
+            raise HTTPException(status_code=500, detail="简化处理器未初始化")
         
-        # 构建处理参数
-        input_data = {
-            "content": request.content,
-            "type": request.type,
-            "metadata": request.metadata,
-            "operation": "create",
-            "options": {
+        logger.info(f"🚀 开始处理内容，长度: {len(request.content)} 字符")
+        
+        # 使用简化处理器
+        result = await simple_processor.process_content(
+            content=request.content,
+            content_type=request.type,
+            metadata=request.metadata,
+            options={
                 "enable_linking": request.options.enableLinking,
                 "enable_vector_db": request.options.enable_vector_db,
                 "force_structure": request.options.force_structure,
                 "batch_mode": False
             }
-        }
-        
-        # 执行处理
-        result = await asyncio.get_event_loop().run_in_executor(
-            None, orchestrator.process, input_data
         )
+        
+        logger.info(f"✅ 处理完成: {'成功' if result.get('success') else '失败'}")
         
         return ProcessingResponse(
             success=result.get("success", False),
             result=result.get("result"),
-            output_file=result.get("output_file"),
+            output_file="",  # 简化处理器暂不保存文件
             doc_id=result.get("doc_id"),
-            statistics=result.get("statistics"),
-            errors=result.get("errors", []),
+            statistics=result.get("result", {}).get("statistics", {}),
+            errors=[result.get("error")] if result.get("error") else [],
             message="处理完成"
         )
         
@@ -696,30 +774,43 @@ async def get_document_content(doc_id: str):
 async def websocket_progress(websocket: WebSocket):
     """WebSocket 进度推送"""
     await websocket.accept()
+    logger.info(f"新的WebSocket连接已建立，当前连接数: {len(active_websocket_connections) + 1}")
+    
+    # 添加到活跃连接集合
+    active_websocket_connections.add(websocket)
     
     try:
-        if not progress_server:
-            await websocket.send_text(json.dumps({
-                "type": "error",
-                "message": "进度服务器未初始化"
-            }))
-            return
-        
-        # 将 WebSocket 连接添加到进度服务器
-        await progress_server.add_connection(websocket)
+        # 发送连接确认消息
+        await websocket.send_text(json.dumps({
+            "type": "connection_confirmed",
+            "message": "WebSocket连接已建立",
+            "timestamp": time.time()
+        }))
         
         # 保持连接直到断开
         while True:
             try:
-                await websocket.receive_text()
+                message = await websocket.receive_text()
+                # 处理客户端发送的消息（如ping/pong）
+                try:
+                    data = json.loads(message)
+                    if data.get("type") == "ping":
+                        await websocket.send_text(json.dumps({
+                            "type": "pong",
+                            "timestamp": time.time()
+                        }))
+                except json.JSONDecodeError:
+                    pass
             except WebSocketDisconnect:
+                logger.info("WebSocket连接断开")
                 break
                 
     except Exception as e:
         logger.error(f"WebSocket 错误: {str(e)}")
     finally:
-        if progress_server:
-            await progress_server.remove_connection(websocket)
+        # 从活跃连接中移除
+        active_websocket_connections.discard(websocket)
+        logger.info(f"WebSocket连接已移除，当前连接数: {len(active_websocket_connections)}")
 
 # 主函数
 def main():

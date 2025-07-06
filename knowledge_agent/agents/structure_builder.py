@@ -89,6 +89,10 @@ class StructureBuilder(BaseAgent):
         frequency_based_concepts = self._frequency_based_concept_extraction(content)
         concepts.extend(frequency_based_concepts)
         
+        # 4. 🤖 AI增强的概念提取
+        ai_concepts = self._ai_enhanced_concept_extraction(content)
+        concepts.extend(ai_concepts)
+        
         # 去重和评分
         concepts = self._deduplicate_and_score_concepts(concepts)
         
@@ -249,6 +253,104 @@ class StructureBuilder(BaseAgent):
             return False
         
         return True
+    
+    def _ai_enhanced_concept_extraction(self, content: str) -> List[Dict[str, Any]]:
+        """🤖 AI增强的概念提取"""
+        concepts = []
+        
+        try:
+            logger.info("开始AI增强概念提取...")
+            
+            # 构建提示词
+            messages = [
+                {
+                    "role": "system",
+                    "content": self.get_system_prompt()
+                },
+                {
+                    "role": "user", 
+                    "content": f"""请分析以下内容，提取其中的核心概念和重要术语：
+
+{content[:2000]}  # 限制内容长度
+
+请以JSON格式返回概念列表，每个概念包含以下字段：
+- term: 概念名称
+- definition: 概念定义或解释（如果内容中包含）
+- type: 概念类型（如：technical_term, concept, methodology等）
+- confidence: 置信度(0-1)
+
+示例：
+[
+  {{"term": "机器学习", "definition": "让计算机系统自动改进性能的方法", "type": "technical_term", "confidence": 0.9}},
+  {{"term": "神经网络", "definition": "", "type": "technical_term", "confidence": 0.8}}
+]
+
+只返回JSON数组，不要其他文字。"""
+                }
+            ]
+            
+            # 调用AI模型
+            response = self.call_llm(messages, max_tokens=1000)
+            
+            if response:
+                logger.info(f"AI概念提取响应: {response[:200]}...")
+                
+                # 解析AI响应
+                try:
+                    import json
+                    ai_concepts_data = json.loads(response)
+                    
+                    for concept_data in ai_concepts_data:
+                        if isinstance(concept_data, dict) and 'term' in concept_data:
+                            concept = {
+                                'term': concept_data.get('term', '').strip(),
+                                'definition': concept_data.get('definition', '').strip(),
+                                'type': concept_data.get('type', 'ai_extracted'),
+                                'confidence': float(concept_data.get('confidence', 0.7)),
+                                'source': 'ai_enhanced'
+                            }
+                            
+                            # 验证概念有效性
+                            if self._is_valid_concept(concept['term']):
+                                concepts.append(concept)
+                                
+                    logger.info(f"AI成功提取了 {len(concepts)} 个概念")
+                    
+                except json.JSONDecodeError as e:
+                    logger.warning(f"AI响应JSON解析失败: {e}")
+                    # 尝试简单文本解析
+                    concepts.extend(self._parse_ai_response_fallback(response))
+                    
+        except Exception as e:
+            logger.error(f"AI概念提取失败: {e}")
+            
+        return concepts
+    
+    def _parse_ai_response_fallback(self, response: str) -> List[Dict[str, Any]]:
+        """AI响应的备用解析方法"""
+        concepts = []
+        
+        # 尝试提取类似概念的模式
+        patterns = [
+            r'"term":\s*"([^"]+)"',
+            r'概念[:：]\s*([^\n,，]{2,20})',
+            r'术语[:：]\s*([^\n,，]{2,20})',
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, response)
+            for match in matches:
+                term = match.strip()
+                if self._is_valid_concept(term):
+                    concepts.append({
+                        'term': term,
+                        'definition': '',
+                        'type': 'ai_extracted_fallback',
+                        'confidence': 0.6,
+                        'source': 'ai_enhanced_fallback'
+                    })
+        
+        return concepts
     
     def _deduplicate_and_score_concepts(self, concepts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """去重和评分概念"""

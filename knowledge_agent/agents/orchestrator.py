@@ -109,9 +109,18 @@ class KnowledgeOrchestrator(BaseAgent):
             if error is not None:
                 self.current_progress.error = error
             
+            logger.info(f"🔄 进度更新: {stage.value} - {current_step} (回调存在: {self.progress_callback is not None})")
+            
             # 调用进度回调
             if self.progress_callback:
-                self.progress_callback(self.current_progress)
+                try:
+                    logger.info(f"📤 调用进度回调: {self.current_progress.to_dict()}")
+                    self.progress_callback(self.current_progress)
+                    logger.info(f"✅ 进度回调调用成功")
+                except Exception as e:
+                    logger.error(f"❌ 进度回调调用失败: {e}")
+            else:
+                logger.warning("⚠️ 没有进度回调函数")
                 
             logger.info(f"进度更新: {stage.value} - {current_step}")
     
@@ -335,7 +344,7 @@ class KnowledgeOrchestrator(BaseAgent):
             if self.current_progress:
                 complexity = self.current_progress.complexity
                 if complexity != TaskComplexity.SIMPLE:
-                    self._update_progress(ProcessingStage.WORKER_PROCESSING, "内容解析器处理中", 3)
+                    self._update_progress(ProcessingStage.WORKER_PROCESSING, "🤖 内容解析器处理中...", 3, ["内容解析器"])
             
             parse_input = {
                 "content": content,
@@ -359,9 +368,9 @@ class KnowledgeOrchestrator(BaseAgent):
             if self.current_progress:
                 complexity = self.current_progress.complexity
                 if complexity == TaskComplexity.MEDIUM:
-                    self._update_progress(ProcessingStage.WORKER_PROCESSING, "结构构建器处理中", 4)
+                    self._update_progress(ProcessingStage.WORKER_PROCESSING, "🏗️ 结构构建器处理中...", 4, ["结构构建器"])
                 elif complexity == TaskComplexity.COMPLEX:
-                    self._update_progress(ProcessingStage.WORKER_PROCESSING, "结构构建器处理中", 4)
+                    self._update_progress(ProcessingStage.WORKER_PROCESSING, "🏗️ 结构构建器和AI分析器处理中...", 4, ["结构构建器", "AI分析器"])
             
             structure_input = parse_result.copy()
             structure_result = self.structure_builder.process(structure_input)
@@ -376,9 +385,9 @@ class KnowledgeOrchestrator(BaseAgent):
                 if self.current_progress:
                     complexity = self.current_progress.complexity
                     if complexity == TaskComplexity.MEDIUM:
-                        self._update_progress(ProcessingStage.WORKER_PROCESSING, "链接发现器处理中", 5)
+                        self._update_progress(ProcessingStage.WORKER_PROCESSING, "🔗 链接发现器处理中...", 5, ["链接发现器"])
                     elif complexity == TaskComplexity.COMPLEX:
-                        self._update_progress(ProcessingStage.WORKER_PROCESSING, "概念提取器和关系分析器处理中", 5)
+                        self._update_progress(ProcessingStage.WORKER_PROCESSING, "🔗 概念提取器和关系分析器处理中...", 5, ["概念提取器", "关系分析器"])
                 
                 link_input = {
                     "concepts": structure_result.get("concepts", []),

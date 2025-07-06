@@ -41,24 +41,80 @@ const ProcessingHub = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('');
   const [processingSteps, setProcessingSteps] = useState<Array<{step: string, status: 'pending' | 'processing' | 'completed' | 'error', message?: string}>>([]);
+  const [wsTestResult, setWsTestResult] = useState<string>('');
+  const [forceUpdate, setForceUpdate] = useState(0);
   const { toast } = useToast();
+
+  // 强制组件重新渲染的函数
+  const triggerRerender = () => {
+    setForceUpdate(prev => prev + 1);
+    console.log('触发组件重新渲染:', forceUpdate + 1);
+  };
+
+  // 双链渲染函数
+  const renderDoubleLinks = (text: string) => {
+    const linkPattern = /\[\[([^\]]+)\]\]/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkPattern.exec(text)) !== null) {
+      // 添加链接前的文本
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index));
+      }
+      
+      // 添加链接
+      const conceptName = match[1];
+      parts.push(
+        <span 
+          key={`link-${match.index}`}
+          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-md border border-blue-200 hover:bg-blue-200 cursor-pointer transition-colors"
+          title={`概念: ${conceptName}`}
+          onClick={() => {
+            // 这里可以添加跳转到概念详情的逻辑
+            toast({
+              title: "概念链接",
+              description: `点击了概念: ${conceptName}`,
+            });
+          }}
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+          {conceptName}
+        </span>
+      );
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // 添加剩余的文本
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+    
+    return parts.length > 0 ? parts : text;
+  };
+
   const handleStartProcessing = async () => {
     if (!content.trim()) return;
+    
+    console.log('🚀 ===== 开始处理内容 =====');
+    console.log('📝 输入内容长度:', content.length);
+    console.log('📝 输入模式:', inputMode);
+    console.log('⚙️ 处理选项:', options);
     
     setProcessing(true);
     setProgress(0);
     setError(null);
     setResult(null);
     setCurrentStatus('初始化处理...');
+    setWsTestResult('');
     
-    // 初始化处理步骤
-    const initialSteps = [
-      { step: 'analyzing', status: 'pending' as const, message: 'Agent识别中' },
-      { step: 'generating_workers', status: 'pending' as const, message: '生成工作者' },
-      { step: 'worker_processing', status: 'pending' as const, message: '工作者处理中' },
-      { step: 'finalizing', status: 'pending' as const, message: '完成处理' }
-    ];
-    setProcessingSteps(initialSteps);
+    // 清空步骤，等待后端动态发送
+    setProcessingSteps([]);
+    console.log('🔄 清空步骤，等待后端返回步骤');
 
     try {
       // 准备请求数据
@@ -72,101 +128,191 @@ const ProcessingHub = () => {
         },
         options: options
       };
-
-      let ws: WebSocket | null = null;
       
-      try {
-        // 连接WebSocket接收进度更新
-        ws = new WebSocket('ws://localhost:8000/ws/progress');
+      console.log('📤 准备发送到后端的请求数据:', JSON.stringify(requestData, null, 2));
+
+      // 设置进度监听器
+      const progressListener = (message: any) => {
+        console.log('=== 接收到WebSocket消息 ===');
+        console.log('消息内容:', JSON.stringify(message, null, 2));
         
-        await new Promise<void>((resolve, reject) => {
-          ws!.onopen = () => {
-            console.log('WebSocket连接已建立');
-            resolve();
-          };
+        try {
+          // 处理pong消息
+          if (message.type === 'pong') {
+            console.log('收到pong回复，连接正常');
+            return;
+          }
           
-          ws!.onerror = (error) => {
-            console.error('WebSocket连接失败:', error);
-            reject(error);
-          };
-          
-          // 设置超时
-          setTimeout(() => reject(new Error('WebSocket连接超时')), 5000);
-        });
-        
-        ws.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            console.log('收到WebSocket消息:', message);
+          // 检查消息类型和数据结构
+          if (message.type === 'progress_update' && message.data) {
+            const progressData = message.data;
+            console.log('=== 处理进度更新 ===');
+            console.log('当前阶段:', progressData.stage);
+            console.log('当前步骤:', progressData.current_step);
+            console.log('进度百分比:', progressData.progress_percent);
+            console.log('完成步骤数:', progressData.completed_steps);
+            console.log('总步骤数:', progressData.total_steps);
+            console.log('工作者列表:', progressData.workers);
+            console.log('任务复杂度:', progressData.complexity);
             
-            // 检查消息类型和数据结构
-            if (message.type === 'progress_update' && message.data) {
-              const progressData = message.data;
-              console.log('解析进度数据:', progressData);
-              
-              // 更新当前状态
-              if (progressData.current_step) {
-                setCurrentStatus(progressData.current_step);
-              }
-              
-              // 更新进度百分比
-              if (progressData.progress_percent !== undefined) {
-                setProgress(progressData.progress_percent);
-              } else if (progressData.completed_steps !== undefined && progressData.total_steps > 0) {
-                const progressPercentage = (progressData.completed_steps / progressData.total_steps) * 100;
-                setProgress(progressPercentage);
-              }
-              
-              // 更新处理步骤状态
+            // 更新进度百分比
+            if (progressData.progress_percent !== undefined) {
+              const newProgress = Math.max(0, Math.min(100, progressData.progress_percent));
+              console.log('更新进度条:', newProgress + '%');
+              setProgress(newProgress);
+            } else if (progressData.completed_steps !== undefined && progressData.total_steps > 0) {
+              const newProgress = Math.round((progressData.completed_steps / progressData.total_steps) * 100);
+              console.log('计算进度条:', newProgress + '%');
+              setProgress(newProgress);
+            }
+            
+            // 更新当前状态
+            if (progressData.current_step) {
+              console.log('更新当前状态:', progressData.current_step);
+              setCurrentStatus(progressData.current_step);
+            }
+            
+            // 根据阶段和复杂度动态生成步骤
+            if (progressData.stage) {
+              console.log('=== 根据阶段信息更新步骤 ===');
               setProcessingSteps(prevSteps => {
-                const newSteps = [...prevSteps];
+                let newSteps = [...prevSteps];
                 
-                // 根据进度数据更新步骤状态
-                if (progressData.stage) {
-                  const stepIndex = newSteps.findIndex(step => step.step === progressData.stage);
-                  if (stepIndex !== -1) {
-                    newSteps[stepIndex] = {
-                      ...newSteps[stepIndex],
-                      status: 'processing',
-                      message: progressData.current_step || newSteps[stepIndex].message
-                    };
-                    
-                    // 将之前的步骤标记为完成
-                    for (let i = 0; i < stepIndex; i++) {
-                      if (newSteps[i].status !== 'completed') {
-                        newSteps[i].status = 'completed';
-                      }
-                    }
+                // 如果步骤列表为空，根据复杂度创建步骤
+                if (newSteps.length === 0) {
+                  const complexity = progressData.complexity;
+                  console.log('根据复杂度创建步骤:', complexity);
+                  
+                  if (complexity === 'simple_task') {
+                    newSteps = [
+                      { step: 'analyzing', status: 'pending' as const, message: 'Agent识别中' },
+                      { step: 'worker_processing', status: 'pending' as const, message: 'Agent处理中' },
+                      { step: 'completed', status: 'pending' as const, message: '处理完成' }
+                    ];
+                  } else if (complexity === 'medium_task') {
+                    newSteps = [
+                      { step: 'analyzing', status: 'pending' as const, message: 'Agent识别中' },
+                      { step: 'generating_workers', status: 'pending' as const, message: '生成工作者' },
+                      { step: 'worker_processing', status: 'pending' as const, message: '工作者处理中' },
+                      { step: 'finalizing', status: 'pending' as const, message: '完成处理' },
+                      { step: 'completed', status: 'pending' as const, message: '处理完成' }
+                    ];
+                  } else { // complex_task
+                    newSteps = [
+                      { step: 'analyzing', status: 'pending' as const, message: 'Agent识别中' },
+                      { step: 'generating_workers', status: 'pending' as const, message: '生成工作者' },
+                      { step: 'worker_processing', status: 'pending' as const, message: '并行处理中' },
+                      { step: 'finalizing', status: 'pending' as const, message: '完成处理' },
+                      { step: 'completed', status: 'pending' as const, message: '处理完成' }
+                    ];
                   }
                 }
                 
+                // 更新步骤状态
+                const stage = progressData.stage;
+                const isCompleted = stage === 'completed' || progressData.progress_percent === 100;
+                
+                // 找到当前阶段对应的步骤
+                const stageMapping = {
+                  'analyzing': 0,
+                  'generating_workers': 1,
+                  'worker_processing': newSteps.length > 3 ? 2 : 1,
+                  'finalizing': newSteps.length - 2,
+                  'completed': newSteps.length - 1
+                };
+                
+                const currentStepIndex = stageMapping[stage] || 0;
+                
+                // 更新步骤状态
+                newSteps.forEach((step, index) => {
+                  if (index < currentStepIndex) {
+                    // 之前的步骤标记为完成
+                    newSteps[index] = { ...step, status: 'completed' };
+                  } else if (index === currentStepIndex) {
+                    // 当前步骤
+                    newSteps[index] = {
+                      ...step,
+                      status: isCompleted ? 'completed' : 'processing',
+                      message: progressData.current_step || step.message
+                    };
+                  } else {
+                    // 后续步骤保持待处理
+                    newSteps[index] = { ...step, status: 'pending' };
+                  }
+                });
+                
+                // 如果处理完成，标记所有步骤为完成
+                if (isCompleted) {
+                  newSteps.forEach((step, index) => {
+                    newSteps[index] = { ...step, status: 'completed' };
+                  });
+                }
+                
+                // 如果有工作者信息，更新相关步骤的消息
+                if (progressData.workers && Array.isArray(progressData.workers) && progressData.workers.length > 0) {
+                  const workerStepIndex = stageMapping['worker_processing'] || 1;
+                  if (newSteps[workerStepIndex]) {
+                    newSteps[workerStepIndex] = {
+                      ...newSteps[workerStepIndex],
+                      message: `${progressData.workers.join(', ')} 处理中`
+                    };
+                  }
+                }
+                
+                console.log('更新后的步骤:', newSteps.map(s => `${s.step}:${s.status}`));
                 return newSteps;
               });
             }
             
-          } catch (err) {
-            console.error('解析WebSocket消息失败:', err);
+            // 强制触发重新渲染
+            triggerRerender();
+            
+          } else {
+            console.log('收到其他类型消息:', message.type);
           }
-        };
-        
-        ws.onerror = (error) => {
-          console.error('WebSocket错误:', error);
-        };
-        
-        ws.onclose = () => {
-          console.log('WebSocket连接已关闭');
-        };
+          
+        } catch (err) {
+          console.error('处理WebSocket消息失败:', err);
+          console.error('失败的消息:', message);
+        }
+      };
 
+      try {
+        // 使用已有的progressWebSocket连接
+        console.log('🔌 正在连接进度WebSocket...');
+        console.log('🔌 WebSocket当前状态:', progressWebSocket.isConnected() ? '已连接' : '未连接');
+        
+        // 添加进度监听器
+        progressWebSocket.addListener(progressListener);
+        console.log('👂 已添加WebSocket进度监听器');
+        
+        // 如果未连接，先连接
+        if (!progressWebSocket.isConnected()) {
+          console.log('🔌 开始连接WebSocket...');
+          await progressWebSocket.connect();
+          console.log('✅ 进度WebSocket连接成功');
+        } else {
+          console.log('✅ 进度WebSocket已连接');
+        }
+
+        console.log('📡 开始发送处理请求到 POST /process...');
+        console.log('📡 API基础URL:', 'http://localhost:8000');
+        
         // 发送处理请求
         const response: ProcessingResponse = await apiClient.processContent(requestData);
+        console.log('📥 收到后端响应:', JSON.stringify(response, null, 2));
         
         if (response.success) {
+          console.log('✅ 后端处理成功');
           // 处理成功，标记所有步骤为完成
-          setProcessingSteps(prevSteps => 
-            prevSteps.map(step => ({ ...step, status: 'completed' as const }))
-          );
+          setProcessingSteps(prevSteps => {
+            const completedSteps = prevSteps.map(step => ({ ...step, status: 'completed' as const }));
+            console.log('✅ 标记所有步骤为完成:', completedSteps);
+            return completedSteps;
+          });
           setCurrentStatus('处理完成！');
           setProgress(100);
+          console.log('✅ 设置进度为100%');
           
           setResult({
             content: response.result?.structured_content || response.result?.content || '处理完成',
@@ -183,78 +329,37 @@ const ProcessingHub = () => {
             description: response.message || "内容已成功处理",
           });
         } else {
+          console.error('❌ 后端处理失败:', response.errors);
           // 处理失败
           throw new Error(response.errors?.join(', ') || '处理失败');
         }
         
       } catch (err) {
-        // 如果WebSocket连接失败，仍然尝试处理请求（降级处理）
-        if (err instanceof Error && err.message.includes('WebSocket')) {
-          console.warn('WebSocket连接失败，继续处理请求（无实时进度）');
-          try {
-            const response: ProcessingResponse = await apiClient.processContent(requestData);
-            
-            if (response.success) {
-              setProcessingSteps(prevSteps => 
-                prevSteps.map(step => ({ ...step, status: 'completed' as const }))
-              );
-              setCurrentStatus('处理完成！');
-              setProgress(100);
-              
-              setResult({
-                content: response.result?.structured_content || response.result?.content || '处理完成',
-                statistics: response.statistics || {
-                  conceptCount: 0,
-                  internalLinks: 0,
-                  processingTime: 0,
-                  qualityScore: 0
-                }
-              });
-              
-              toast({
-                title: "处理成功",
-                description: response.message || "内容已成功处理（无实时进度）",
-              });
-              return;
-            } else {
-              throw new Error(response.errors?.join(', ') || '处理失败');
-            }
-          } catch (apiErr) {
-            const errorMessage = formatError(apiErr);
-            setError(errorMessage);
-            setCurrentStatus('处理失败');
-            
-            toast({
-              title: "处理失败",
-              description: errorMessage,
-              variant: "destructive",
-            });
+        // 处理请求或WebSocket错误
+        console.error('处理过程发生错误:', err);
+        const errorMessage = formatError(err);
+        setError(errorMessage);
+        setCurrentStatus('处理失败');
+        
+        // 标记当前处理步骤为错误状态
+        setProcessingSteps(prevSteps => {
+          const newSteps = [...prevSteps];
+          const processingIndex = newSteps.findIndex(step => step.status === 'processing');
+          if (processingIndex !== -1) {
+            newSteps[processingIndex].status = 'error';
           }
-        } else {
-          const errorMessage = formatError(err);
-          setError(errorMessage);
-          setCurrentStatus('处理失败');
-          
-          // 标记当前处理步骤为错误状态
-          setProcessingSteps(prevSteps => {
-            const newSteps = [...prevSteps];
-            const processingIndex = newSteps.findIndex(step => step.status === 'processing');
-            if (processingIndex !== -1) {
-              newSteps[processingIndex].status = 'error';
-            }
-            return newSteps;
-          });
-          
-          toast({
-            title: "处理失败",
-            description: errorMessage,
-            variant: "destructive",
-          });
-        }
+          return newSteps;
+        });
+        
+        toast({
+          title: "处理失败",
+          description: errorMessage,
+          variant: "destructive",
+        });
       } finally {
-        // 确保关闭WebSocket连接
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.close();
+        // 清理WebSocket监听器
+        if (progressWebSocket && progressWebSocket.isConnected()) {
+          progressWebSocket.removeListener(progressListener);
         }
       }
     } catch (outerErr) {
@@ -282,8 +387,9 @@ const ProcessingHub = () => {
     setError(null);
     setProgress(0);
     setCurrentStatus('');
-          setProcessingSteps([]);
-    };
+    setProcessingSteps([]);
+    setWsTestResult('');
+  };
 
     const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -304,66 +410,226 @@ const ProcessingHub = () => {
     setError(null);
     setResult(null);
     setCurrentStatus('正在上传文件...');
-    setProgress(20);
+    setProgress(0);
     
-    // 初始化文件上传步骤
-    const uploadSteps = [
-      { step: 'uploading', status: 'processing' as const, message: '正在上传文件' },
-      { step: 'analyzing', status: 'pending' as const, message: '分析文件内容' },
-      { step: 'processing', status: 'pending' as const, message: '处理文件' },
-      { step: 'finalizing', status: 'pending' as const, message: '完成处理' }
-    ];
-    setProcessingSteps(uploadSteps);
+    // 清空步骤，等待后端动态发送
+    setProcessingSteps([]);
+    console.log('开始文件上传，等待后端返回步骤');
     
     try {
-      // 直接使用 API 上传文件
-      const response: ProcessingResponse = await apiClient.uploadFile(file);
-      
-      if (response.success) {
-        // 上传成功，标记所有步骤为完成
-        setProcessingSteps(prevSteps => 
-          prevSteps.map(step => ({ ...step, status: 'completed' as const }))
-        );
-        setCurrentStatus('文件处理完成！');
-        setProgress(100);
+      // 设置进度监听器 - 复用之前的progressListener逻辑
+      const progressListener = (message: any) => {
+        console.log('=== 文件上传接收到WebSocket消息 ===');
+        console.log('消息内容:', JSON.stringify(message, null, 2));
         
-        setResult({
-          content: response.result?.structured_content || response.result?.content || '文件处理完成',
-          statistics: response.statistics || {
-            conceptCount: 0,
-            internalLinks: 0,
-            processingTime: 0,
-            qualityScore: 0
+        try {
+          if (message.type === 'pong') {
+            console.log('收到pong回复，连接正常');
+            return;
           }
-        });
+          
+          if (message.type === 'progress_update' && message.data) {
+            const progressData = message.data;
+            console.log('=== 处理文件上传进度更新 ===');
+            console.log('当前阶段:', progressData.stage);
+            console.log('当前步骤:', progressData.current_step);
+            console.log('进度百分比:', progressData.progress_percent);
+            console.log('工作者列表:', progressData.workers);
+            console.log('任务复杂度:', progressData.complexity);
+            
+            // 更新进度百分比
+            if (progressData.progress_percent !== undefined) {
+              const newProgress = Math.max(0, Math.min(100, progressData.progress_percent));
+              console.log('更新进度条:', newProgress + '%');
+              setProgress(newProgress);
+            } else if (progressData.completed_steps !== undefined && progressData.total_steps > 0) {
+              const newProgress = Math.round((progressData.completed_steps / progressData.total_steps) * 100);
+              console.log('计算进度条:', newProgress + '%');
+              setProgress(newProgress);
+            }
+            
+            // 更新当前状态
+            if (progressData.current_step) {
+              console.log('更新当前状态:', progressData.current_step);
+              setCurrentStatus(progressData.current_step);
+            }
+            
+            // 根据阶段和复杂度动态生成步骤（与文本处理相同的逻辑）
+            if (progressData.stage) {
+              console.log('=== 根据阶段信息更新文件上传步骤 ===');
+              setProcessingSteps(prevSteps => {
+                let newSteps = [...prevSteps];
+                
+                // 如果步骤列表为空，根据复杂度创建步骤
+                if (newSteps.length === 0) {
+                  const complexity = progressData.complexity;
+                  console.log('根据复杂度创建文件处理步骤:', complexity);
+                  
+                  if (complexity === 'simple_task') {
+                    newSteps = [
+                      { step: 'analyzing', status: 'pending' as const, message: 'Agent识别中' },
+                      { step: 'worker_processing', status: 'pending' as const, message: 'Agent处理中' },
+                      { step: 'completed', status: 'pending' as const, message: '处理完成' }
+                    ];
+                  } else if (complexity === 'medium_task') {
+                    newSteps = [
+                      { step: 'analyzing', status: 'pending' as const, message: 'Agent识别中' },
+                      { step: 'generating_workers', status: 'pending' as const, message: '生成工作者' },
+                      { step: 'worker_processing', status: 'pending' as const, message: '工作者处理中' },
+                      { step: 'finalizing', status: 'pending' as const, message: '完成处理' },
+                      { step: 'completed', status: 'pending' as const, message: '处理完成' }
+                    ];
+                  } else { // complex_task
+                    newSteps = [
+                      { step: 'analyzing', status: 'pending' as const, message: 'Agent识别中' },
+                      { step: 'generating_workers', status: 'pending' as const, message: '生成工作者' },
+                      { step: 'worker_processing', status: 'pending' as const, message: '并行处理中' },
+                      { step: 'finalizing', status: 'pending' as const, message: '完成处理' },
+                      { step: 'completed', status: 'pending' as const, message: '处理完成' }
+                    ];
+                  }
+                }
+                
+                // 更新步骤状态
+                const stage = progressData.stage;
+                const isCompleted = stage === 'completed' || progressData.progress_percent === 100;
+                
+                // 找到当前阶段对应的步骤
+                const stageMapping = {
+                  'analyzing': 0,
+                  'generating_workers': 1,
+                  'worker_processing': newSteps.length > 3 ? 2 : 1,
+                  'finalizing': newSteps.length - 2,
+                  'completed': newSteps.length - 1
+                };
+                
+                const currentStepIndex = stageMapping[stage] || 0;
+                
+                // 更新步骤状态
+                newSteps.forEach((step, index) => {
+                  if (index < currentStepIndex) {
+                    // 之前的步骤标记为完成
+                    newSteps[index] = { ...step, status: 'completed' };
+                  } else if (index === currentStepIndex) {
+                    // 当前步骤
+                    newSteps[index] = {
+                      ...step,
+                      status: isCompleted ? 'completed' : 'processing',
+                      message: progressData.current_step || step.message
+                    };
+                  } else {
+                    // 后续步骤保持待处理
+                    newSteps[index] = { ...step, status: 'pending' };
+                  }
+                });
+                
+                // 如果处理完成，标记所有步骤为完成
+                if (isCompleted) {
+                  newSteps.forEach((step, index) => {
+                    newSteps[index] = { ...step, status: 'completed' };
+                  });
+                }
+                
+                // 如果有工作者信息，更新相关步骤的消息
+                if (progressData.workers && Array.isArray(progressData.workers) && progressData.workers.length > 0) {
+                  const workerStepIndex = stageMapping['worker_processing'] || 1;
+                  if (newSteps[workerStepIndex]) {
+                    newSteps[workerStepIndex] = {
+                      ...newSteps[workerStepIndex],
+                      message: `${progressData.workers.join(', ')} 处理中`
+                    };
+                  }
+                }
+                
+                console.log('更新后的文件处理步骤:', newSteps.map(s => `${s.step}:${s.status}`));
+                return newSteps;
+              });
+            }
+            
+            // 强制触发重新渲染
+            triggerRerender();
+          }
+        } catch (err) {
+          console.error('处理WebSocket消息失败:', err);
+          console.error('失败的消息:', message);
+        }
+      };
+
+      try {
+        // 连接WebSocket监听进度
+        console.log('正在连接进度WebSocket...');
+        progressWebSocket.addListener(progressListener);
         
-        // 更新元数据
-        setMetadata(prev => ({
-          ...prev,
-          source: file.name
-        }));
+        if (!progressWebSocket.isConnected()) {
+          await progressWebSocket.connect();
+          console.log('进度WebSocket连接成功');
+        }
+
+        // 上传文件
+        const response: ProcessingResponse = await apiClient.uploadFile(file);
+        
+        if (response.success) {
+          // 上传成功，标记所有步骤为完成
+          setProcessingSteps(prevSteps => 
+            prevSteps.map(step => ({ ...step, status: 'completed' as const }))
+          );
+          setCurrentStatus('文件处理完成！');
+          setProgress(100);
+          
+          setResult({
+            content: response.result?.structured_content || response.result?.content || '文件处理完成',
+            statistics: response.statistics || {
+              conceptCount: 0,
+              internalLinks: 0,
+              processingTime: 0,
+              qualityScore: 0
+            }
+          });
+          
+          // 更新元数据
+          setMetadata(prev => ({
+            ...prev,
+            source: file.name
+          }));
+          
+          toast({
+            title: "文件上传成功",
+            description: response.message || `文件 ${file.name} 已成功处理`,
+          });
+        } else {
+          throw new Error(response.errors?.join(', ') || '文件处理失败');
+        }
+      } catch (err) {
+        const errorMessage = formatError(err);
+        setError(errorMessage);
+        setCurrentStatus('文件处理失败');
+        
+        // 标记当前处理步骤为错误状态
+        setProcessingSteps(prevSteps => {
+          const newSteps = [...prevSteps];
+          const processingIndex = newSteps.findIndex(step => step.status === 'processing');
+          if (processingIndex !== -1) {
+            newSteps[processingIndex].status = 'error';
+          }
+          return newSteps;
+        });
         
         toast({
-          title: "文件上传成功",
-          description: response.message || `文件 ${file.name} 已成功处理`,
+          title: "文件上传失败",
+          description: errorMessage,
+          variant: "destructive",
         });
-      } else {
-        throw new Error(response.errors?.join(', ') || '文件处理失败');
+      } finally {
+        // 清理WebSocket监听器
+        if (progressWebSocket && progressWebSocket.isConnected()) {
+          progressWebSocket.removeListener(progressListener);
+        }
       }
-    } catch (err) {
-      const errorMessage = formatError(err);
+    } catch (outerErr) {
+      console.error('文件上传过程发生错误:', outerErr);
+      const errorMessage = formatError(outerErr);
       setError(errorMessage);
       setCurrentStatus('文件处理失败');
-      
-      // 标记当前处理步骤为错误状态
-      setProcessingSteps(prevSteps => {
-        const newSteps = [...prevSteps];
-        const processingIndex = newSteps.findIndex(step => step.status === 'processing');
-        if (processingIndex !== -1) {
-          newSteps[processingIndex].status = 'error';
-        }
-        return newSteps;
-      });
       
       toast({
         title: "文件上传失败",
@@ -374,6 +640,83 @@ const ProcessingHub = () => {
       setProcessing(false);
     }
   };
+
+  // WebSocket连接测试函数
+  const testWebSocketConnection = async () => {
+    console.log('🧪 ===== 开始WebSocket连接测试 =====');
+    setWsTestResult('正在测试WebSocket连接...');
+    
+    try {
+      console.log('🔍 检查WebSocket当前状态...');
+      console.log('🔍 当前连接状态:', progressWebSocket.isConnected());
+      
+      // 先测试API连接
+      console.log('🌐 测试API连接到 http://localhost:8000/health...');
+      try {
+        const healthResponse = await fetch('http://localhost:8000/health');
+        const healthData = await healthResponse.json();
+        console.log('✅ API健康检查成功:', healthData);
+      } catch (apiError) {
+        console.error('❌ API连接失败:', apiError);
+        setWsTestResult('❌ API服务器连接失败，请检查后端是否启动');
+        return;
+      }
+      
+      // 使用已有的progressWebSocket进行测试
+      if (progressWebSocket.isConnected()) {
+        console.log('✅ WebSocket已连接');
+        setWsTestResult('✅ WebSocket已连接');
+        return;
+      }
+      
+      console.log('🔌 WebSocket未连接，尝试连接...');
+      console.log('🔌 连接URL: ws://localhost:8000/ws/progress');
+      
+      // 如果未连接，尝试连接
+      await progressWebSocket.connect();
+      console.log('✅ WebSocket连接成功');
+      
+      // 测试是否能正常通信
+      const testListener = (message: any) => {
+        console.log('📨 测试中收到WebSocket消息:', message);
+        if (message.type === 'pong') {
+          console.log('✅ 收到pong回复，连接和通信正常');
+          setWsTestResult('✅ WebSocket连接和通信正常！');
+          progressWebSocket.removeListener(testListener);
+        }
+      };
+      
+      progressWebSocket.addListener(testListener);
+      console.log('👂 已添加测试监听器');
+      
+      // 发送ping测试消息
+      if (progressWebSocket.isConnected()) {
+        console.log('✅ WebSocket连接确认成功！');
+        setWsTestResult('✅ WebSocket连接成功！');
+        progressWebSocket.removeListener(testListener);
+      } else {
+        throw new Error('连接状态检查失败');
+      }
+      
+    } catch (error) {
+      console.error('❌ WebSocket连接测试失败:', error);
+      console.error('❌ 错误详情:', error);
+      const errorMsg = error instanceof Error ? error.message : 'WebSocket连接失败';
+      setWsTestResult(`❌ 连接失败: ${errorMsg}`);
+      
+      // 检查常见问题
+      console.log('🔍 故障排查信息:');
+      console.log('🔍 - 请确认后端API服务器在 http://localhost:8000 运行');
+      console.log('🔍 - 请确认WebSocket端点 ws://localhost:8000/ws/progress 可用');
+      console.log('🔍 - 请检查网络连接和防火墙设置');
+    }
+    
+    // 3秒后自动清除结果
+    setTimeout(() => {
+      setWsTestResult('');
+    }, 5000);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -381,7 +724,27 @@ const ProcessingHub = () => {
           <h1 className="text-3xl font-bold text-gray-900">处理中心</h1>
           <p className="text-gray-600 mt-1 my-[15px]">智能处理各种内容，生成结构化知识</p>
         </div>
-        
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="outline" 
+            onClick={testWebSocketConnection}
+            className="flex items-center gap-2"
+          >
+            <span className="text-blue-600">🔗</span>
+            测试连接
+          </Button>
+          {wsTestResult && (
+            <div className="text-sm px-3 py-1 rounded-full bg-gray-100">
+              {wsTestResult}
+            </div>
+          )}
+          <div className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">
+            WebSocket: {progressWebSocket.isConnected() ? '🟢 已连接' : '🔴 未连接'}
+          </div>
+          <div className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">
+            进度: {progress}%
+          </div>
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -502,7 +865,7 @@ const ProcessingHub = () => {
         </Card>
 
         {/* 处理进度 */}
-        {processing && <Card className="bg-card/70 backdrop-blur-sm border-border/50 shadow-xl rounded-3xl overflow-hidden">
+        {processing && <Card className="bg-card/70 backdrop-blur-sm border-border/50 shadow-xl rounded-3xl overflow-hidden processing-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Spinner className="h-5 w-5 animate-spin text-blue-600" />
@@ -516,7 +879,12 @@ const ProcessingHub = () => {
                   <span className="font-medium">{currentStatus || '正在初始化...'}</span>
                   <span className="text-blue-600 font-semibold">{Math.round(progress)}%</span>
                 </div>
-                <Progress value={progress} className="h-3" />
+                <div className="progress-enhanced h-3 w-full overflow-hidden rounded-full">
+                  <div 
+                    className="progress-bar h-full"
+                    style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+                  />
+                </div>
               </div>
               
               {/* 详细步骤 */}
@@ -524,26 +892,28 @@ const ProcessingHub = () => {
                 <h4 className="text-sm font-medium text-gray-700">处理步骤</h4>
                 <div className="space-y-2">
                   {processingSteps.map((step, index) => (
-                    <div key={step.step} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50/50">
+                    <div key={`${step.step}-${index}`} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50/50 border border-gray-100">
                       <div className="flex-shrink-0">
                         {step.status === 'completed' && (
-                          <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                           </div>
                         )}
                         {step.status === 'processing' && (
-                          <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
-                            <Spinner className="w-3 h-3 text-white" />
+                          <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                            <Spinner className="w-4 h-4 text-white" />
                           </div>
                         )}
                         {step.status === 'pending' && (
-                          <div className="w-5 h-5 rounded-full bg-gray-300"></div>
+                          <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                            <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+                          </div>
                         )}
                         {step.status === 'error' && (
-                          <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
                           </div>
@@ -559,17 +929,63 @@ const ProcessingHub = () => {
                           {step.message}
                         </div>
                         {step.status === 'processing' && (
-                          <div className="text-xs text-gray-600 mt-1">正在执行中...</div>
+                          <div className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                            <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse"></div>
+                            正在执行中...
+                          </div>
+                        )}
+                        {step.status === 'completed' && (
+                          <div className="text-xs text-green-600 mt-1">
+                            ✓ 已完成
+                          </div>
+                        )}
+                        {step.status === 'pending' && index === 0 && processingSteps.every(s => s.status === 'pending') && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            等待开始...
+                          </div>
                         )}
                       </div>
-                      {step.status === 'processing' && (
-                        <div className="flex-shrink-0">
-                          <div className="animate-pulse w-2 h-2 bg-blue-500 rounded-full"></div>
-                        </div>
-                      )}
+                      <div className="flex-shrink-0">
+                        {step.status === 'processing' && (
+                          <div className="flex items-center text-xs text-blue-600">
+                            <Clock className="w-3 h-3 mr-1" />
+                            进行中
+                          </div>
+                        )}
+                        {step.status === 'completed' && (
+                          <div className="flex items-center text-xs text-green-600">
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            完成
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
+                
+                {/* 处理提示信息 */}
+                {processingSteps.length > 0 && (
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="text-xs text-blue-700">
+                        <div className="font-medium mb-1">处理信息</div>
+                        <div>
+                          系统正在智能分析内容复杂度，并自动选择合适的工作者Agent进行处理。
+                          {processingSteps.some(step => step.message.includes('工作者')) && (
+                            <span className="block mt-1">
+                              当前有多个专业Agent协同工作，确保处理质量和效率。
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>}
@@ -599,7 +1015,9 @@ const ProcessingHub = () => {
 
                 <TabsContent value="preview" className="mt-4">
                   <div className="prose max-w-none">
-                    <div className="whitespace-pre-wrap">{result.content}</div>
+                    <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
+                      {typeof result.content === 'string' ? renderDoubleLinks(result.content) : result.content}
+                    </div>
                   </div>
                 </TabsContent>
 
