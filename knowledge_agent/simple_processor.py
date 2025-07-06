@@ -31,16 +31,16 @@ class SimpleProgressTracker:
             "timestamp": time.time()
         }
         
-        logger.info(f"🎯 进度更新: {stage} - {message} ({progress_percent}%)")
+        logger.info(f"进度更新: {stage} - {message} ({progress_percent}%)")
         
         if self.websocket_broadcast:
             try:
                 await self.websocket_broadcast(progress_data)
-                logger.info(f"✅ WebSocket进度广播成功")
+                logger.info(f"WebSocket进度广播成功")
             except Exception as e:
-                logger.error(f"❌ WebSocket进度广播失败: {e}")
+                logger.error(f"WebSocket进度广播失败: {e}")
         else:
-            logger.info("📡 没有WebSocket广播函数，跳过进度广播")
+            logger.info("没有WebSocket广播函数，跳过进度广播")
 
 class SimpleKnowledgeProcessor:
     """简化的知识处理器"""
@@ -77,26 +77,26 @@ class SimpleKnowledgeProcessor:
         
         try:
             # 阶段1: 开始分析 (0-20%)
-            await tracker.update_progress("analyzing", "🤖 AI分析内容中...", 10, ["AI分析器"])
+            await tracker.update_progress("analyzing", "AI分析内容中...", 10, ["AI分析器"])
             
             # 使用AI分析内容
             analysis = await self._ai_analyze_content(content)
-            await tracker.update_progress("analyzing", "✅ AI分析完成", 20)
+            await tracker.update_progress("analyzing", "AI分析完成", 20)
             
             # 阶段2: 概念提取 (20-50%)
-            await tracker.update_progress("worker_processing", "🧠 AI概念提取中...", 30, ["概念提取器"])
+            await tracker.update_progress("worker_processing", "AI概念提取中...", 30, ["概念提取器"])
             
             concepts = await self._ai_extract_concepts(content)
-            await tracker.update_progress("worker_processing", "✅ 概念提取完成", 50)
+            await tracker.update_progress("worker_processing", "概念提取完成", 50)
             
             # 阶段3: 结构化处理 (50-80%)
-            await tracker.update_progress("worker_processing", "🏗️ 结构化构建中...", 60, ["结构构建器"])
+            await tracker.update_progress("worker_processing", "结构化构建中...", 60, ["结构构建器"])
             
             structured_content = await self._ai_structure_content(content, concepts, analysis)
-            await tracker.update_progress("worker_processing", "✅ 结构化完成", 80)
+            await tracker.update_progress("worker_processing", "结构化完成", 80)
             
             # 阶段4: 完成处理 (80-100%)
-            await tracker.update_progress("finalizing", "💾 保存处理结果...", 90, ["文件管理器"])
+            await tracker.update_progress("finalizing", "保存处理结果...", 90, ["文件管理器"])
             
             # 检查AI处理是否成功
             ai_success = not (analysis.get('error') or any('error' in str(c) for c in concepts))
@@ -118,7 +118,7 @@ class SimpleKnowledgeProcessor:
                 }
             }
             
-            await tracker.update_progress("completed", "🎉 处理完成！", 100)
+            await tracker.update_progress("completed", "处理完成！", 100)
             
             return {
                 "success": True,
@@ -129,7 +129,7 @@ class SimpleKnowledgeProcessor:
             
         except Exception as e:
             logger.error(f"处理失败: {e}")
-            await tracker.update_progress("error", f"❌ 处理失败: {str(e)}", 0)
+            await tracker.update_progress("error", f"处理失败: {str(e)}", 0)
             return {
                 "success": False,
                 "error": str(e),
@@ -149,7 +149,7 @@ class SimpleKnowledgeProcessor:
             }
             
         try:
-            logger.info(f"🤖 开始AI内容分析... 使用模型: {settings.model_name}")
+            logger.info(f"开始AI内容分析... 使用模型: {settings.model_name}")
             
             response = await asyncio.get_event_loop().run_in_executor(
                 None, 
@@ -181,7 +181,7 @@ class SimpleKnowledgeProcessor:
             )
             
             ai_response = response.choices[0].message.content
-            logger.info(f"✅ AI分析响应: {ai_response[:200]}...")
+            logger.info(f"AI分析响应: {ai_response[:200]}...")
             
             try:
                 return json.loads(ai_response)
@@ -211,7 +211,7 @@ class SimpleKnowledgeProcessor:
             return self._fallback_concept_extraction(content)
             
         try:
-            logger.info(f"🧠 开始AI概念提取... 使用模型: {settings.model_name}")
+            logger.info(f"开始AI概念提取... 使用模型: {settings.model_name}")
             
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -232,7 +232,8 @@ class SimpleKnowledgeProcessor:
 [
   {{"term": "概念名称", "definition": "概念定义", "type": "概念类型", "confidence": 0.9}},
   {{"term": "术语名称", "definition": "术语解释", "type": "technical_term", "confidence": 0.8}}
-]"""
+]
+"""
                         }
                     ],
                     max_tokens=800,
@@ -241,7 +242,7 @@ class SimpleKnowledgeProcessor:
             )
             
             ai_response = response.choices[0].message.content
-            logger.info(f"✅ AI概念提取响应: {ai_response[:200]}...")
+            logger.info(f"AI概念提取响应: {ai_response[:200]}...")
             
             try:
                 # 清理响应中的markdown标记
@@ -258,7 +259,7 @@ class SimpleKnowledgeProcessor:
                     concept['source'] = 'ai_enhanced'
                     concept['final_score'] = concept.get('confidence', 0.7)
                 
-                logger.info(f"✅ AI成功提取了 {len(concepts)} 个概念")
+                logger.info(f"AI成功提取了 {len(concepts)} 个概念")
                 return concepts
                 
             except json.JSONDecodeError as e:
@@ -303,7 +304,7 @@ class SimpleKnowledgeProcessor:
             return self._create_fallback_structure(content, concepts, analysis)
             
         try:
-            logger.info(f"🏗️ 开始AI结构化... 使用模型: {settings.model_name}")
+            logger.info(f"开始AI结构化... 使用模型: {settings.model_name}")
             
             concept_names = [c['term'] for c in concepts[:10]]  # 最多10个概念
             
@@ -340,7 +341,7 @@ class SimpleKnowledgeProcessor:
             )
             
             structured = response.choices[0].message.content
-            logger.info(f"✅ AI结构化完成，长度: {len(structured)}")
+            logger.info(f"AI结构化完成，长度: {len(structured)}")
             
             return structured
             

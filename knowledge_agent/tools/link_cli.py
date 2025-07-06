@@ -19,74 +19,74 @@ from utils.link_renderer import LinkRenderer, ConceptGraphGenerator
 
 def scan_command(args):
     """扫描知识库命令"""
-    print(f"🔍 扫描知识库: {args.knowledge_base}")
+    print(f"扫描知识库: {args.knowledge_base}")
     
     manager = LinkManager(args.knowledge_base)
     stats = manager.scan_knowledge_base()
     
-    print("✅ 扫描完成！")
-    print(f"📁 处理文件数: {stats['scanned_files']}")
-    print(f"🔗 发现概念数: {stats['total_concepts']}")
-    print(f"🌐 总链接数: {stats['total_links']}")
+    print("扫描完成！")
+    print(f"处理文件数: {stats['scanned_files']}")
+    print(f"发现概念数: {stats['total_concepts']}")
+    print(f"总链接数: {stats['total_links']}")
 
 
 def report_command(args):
     """生成报告命令"""
-    print(f"📊 生成链接报告: {args.knowledge_base}")
+    print(f"生成链接报告: {args.knowledge_base}")
     
     manager = LinkManager(args.knowledge_base)
     report = manager.generate_link_report()
     
-    print("=== 📈 链接系统报告 ===")
-    print(f"📄 文档总数: {report['total_documents']}")
-    print(f"🏷️  概念总数: {report['total_concepts']}")
-    print(f"🔗 链接总数: {report['total_links']}")
-    print(f"✅ 已解析链接: {report['resolved_links']}")
-    print(f"📊 解析率: {report['resolution_rate']:.1%}")
-    print(f"🚫 孤立概念数: {report['orphaned_count']}")
+    print("=== 链接系统报告 ===")
+    print(f"文档总数: {report['total_documents']}")
+    print(f"概念总数: {report['total_concepts']}")
+    print(f"链接总数: {report['total_links']}")
+    print(f"已解析链接: {report['resolved_links']}")
+    print(f"解析率: {report['resolution_rate']:.1%}")
+    print(f"孤立概念数: {report['orphaned_count']}")
     
     if report['orphaned_concepts'] and args.verbose:
-        print(f"\n🔍 孤立概念（前{min(20, len(report['orphaned_concepts']))}个）:")
+        print(f"\n孤立概念（前{min(20, len(report['orphaned_concepts']))}个）:")
         for concept in report['orphaned_concepts'][:20]:
             print(f"  - {concept}")
     
     if args.output:
         with open(args.output, 'w', encoding='utf-8') as f:
             json.dump(report, f, ensure_ascii=False, indent=2)
-        print(f"\n💾 详细报告已保存到: {args.output}")
+        print(f"\n详细报告已保存到: {args.output}")
 
 
 def concept_command(args):
     """查询概念命令"""
-    print(f"🔍 查询概念: {args.concept}")
+    print(f"查询概念: {args.concept}")
     
     manager = LinkManager(args.knowledge_base)
     links = manager.get_concept_links(args.concept)
     
     if not links:
-        print(f"❌ 未找到概念 '{args.concept}' 的链接信息")
+        print(f"未找到概念 '{args.concept}' 的链接信息")
         return
     
-    print(f"📋 找到 {len(links)} 个链接:")
+    print(f"找到 {len(links)} 个链接:")
     
     for i, link in enumerate(links, 1):
-        print(f"\n{i}. 📄 来源文档: {Path(link.source_doc).name}")
-        print(f"   📍 行号: {link.line_number}")
-        print(f"   🎯 目标: {Path(link.target_doc).name if link.target_doc else '❌ 未找到'}")
-        print(f"   📝 上下文: {link.context}")
+        print(f"\n{i}. 来源文档: {Path(link.source_doc).name}")
+        print(f"   行号: {link.line_number}")
+        print(f"   目标: {Path(link.target_doc).name if link.target_doc else '未找到'}")
+        print(f"   上下文: {link.context}")
         
         if args.verbose:
-            print(f"   🕐 创建时间: {link.created_at}")
-            print(f"   📂 完整路径: {link.source_doc}")
+            print(f"   创建时间: {link.created_at}")
+            print(f"   完整路径: {link.source_doc}")
 
 
 def render_command(args):
     """渲染文档命令"""
     if not os.path.exists(args.document):
-        print(f"❌ 文档不存在: {args.document}")
+        print(f"文档不存在: {args.document}")
         return
     
-    print(f"🎨 渲染文档: {args.document}")
+    print(f"渲染文档: {args.document}")
     
     manager = LinkManager(args.knowledge_base)
     renderer = LinkRenderer(manager)
@@ -109,15 +109,15 @@ def render_command(args):
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(content)
     
-    print(f"✅ 渲染完成: {output_path}")
+    print(f"渲染完成: {output_path}")
     
     if args.format == 'html':
-        print(f"🌐 可以在浏览器中打开: file://{os.path.abspath(output_path)}")
+        print(f"可以在浏览器中打开: file://{os.path.abspath(output_path)}")
 
 
 def graph_command(args):
     """生成概念图谱命令"""
-    print(f"🕸️  生成概念图谱: {args.knowledge_base}")
+    print(f"生成概念图谱: {args.knowledge_base}")
     
     manager = LinkManager(args.knowledge_base)
     graph_generator = ConceptGraphGenerator(manager)
@@ -136,25 +136,25 @@ def graph_command(args):
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(content)
     
-    print(f"✅ 图谱生成完成: {output_path}")
-    print(f"📊 包含 {len(graph_generator.generate_graph_data(args.max_concepts)['nodes'])} 个概念节点")
+    print(f"图谱生成完成: {output_path}")
+    print(f"包含 {len(graph_generator.generate_graph_data(args.max_concepts)['nodes'])} 个概念节点")
     
     if args.format == 'html':
-        print(f"🌐 可以在浏览器中打开: file://{os.path.abspath(output_path)}")
+        print(f"可以在浏览器中打开: file://{os.path.abspath(output_path)}")
 
 
 def list_command(args):
     """列出所有概念命令"""
-    print(f"📋 列出所有概念: {args.knowledge_base}")
+    print(f"列出所有概念: {args.knowledge_base}")
     
     manager = LinkManager(args.knowledge_base)
     concepts = manager.get_all_concepts()
     
     if not concepts:
-        print("❌ 未找到任何概念")
+        print("未找到任何概念")
         return
     
-    print(f"📊 找到 {len(concepts)} 个概念:")
+    print(f"找到 {len(concepts)} 个概念:")
     
     # 按引用次数排序
     concepts.sort(key=lambda x: x['reference_count'], reverse=True)
@@ -164,37 +164,37 @@ def list_command(args):
         print(f"{i:3d}. {status} {concept['name']} ({concept['reference_count']} 次引用)")
         
         if args.verbose and concept['primary_doc']:
-            print(f"     📄 主文档: {Path(concept['primary_doc']).name}")
+            print(f"     主文档: {Path(concept['primary_doc']).name}")
 
 
 def check_command(args):
     """检查链接完整性命令"""
-    print(f"🔍 检查链接完整性: {args.knowledge_base}")
+    print(f"检查链接完整性: {args.knowledge_base}")
     
     manager = LinkManager(args.knowledge_base)
     
     # 生成报告
     report = manager.generate_link_report()
     
-    print("=== 🔍 链接完整性检查 ===")
+    print("=== 链接完整性检查 ===")
     
     # 检查解析率
     if report['resolution_rate'] < 0.8:
-        print(f"⚠️  链接解析率较低: {report['resolution_rate']:.1%}")
+        print(f"链接解析率较低: {report['resolution_rate']:.1%}")
     else:
-        print(f"✅ 链接解析率良好: {report['resolution_rate']:.1%}")
+        print(f"链接解析率良好: {report['resolution_rate']:.1%}")
     
     # 检查孤立概念
     if report['orphaned_count'] > 0:
-        print(f"⚠️  发现 {report['orphaned_count']} 个孤立概念")
+        print(f"发现 {report['orphaned_count']} 个孤立概念")
         
         if args.fix:
-            print("🔧 尝试修复孤立概念...")
+            print("尝试修复孤立概念...")
             # 这里可以实现自动修复逻辑
             # 例如：为孤立概念创建占位符文档
-            print("💡 建议：为重要的孤立概念创建专门的文档")
+            print("建议：为重要的孤立概念创建专门的文档")
     else:
-        print("✅ 没有发现孤立概念")
+        print("没有发现孤立概念")
     
     # 检查文件完整性
     broken_links = []
@@ -205,11 +205,11 @@ def check_command(args):
             broken_links.append(concept)
     
     if broken_links:
-        print(f"🚫 发现 {len(broken_links)} 个断开的文件链接:")
+        print(f"发现 {len(broken_links)} 个断开的文件链接:")
         for concept in broken_links[:10]:  # 只显示前10个
             print(f"  - {concept['name']} -> {concept['primary_doc']}")
     else:
-        print("✅ 所有文件链接完整")
+        print("所有文件链接完整")
 
 
 def main():
@@ -282,7 +282,7 @@ def main():
     
     # 检查知识库路径
     if not os.path.exists(args.knowledge_base):
-        print(f"❌ 知识库路径不存在: {args.knowledge_base}")
+        print(f"知识库路径不存在: {args.knowledge_base}")
         sys.exit(1)
     
     # 执行命令

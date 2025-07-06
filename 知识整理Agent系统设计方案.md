@@ -8,20 +8,20 @@
 
 ---
 
-## 📋 系统概述
+##  系统概述
 
-### 🎯 系统目标
+###  系统目标
 
 构建一个基于多Agent架构的智能知识整理系统，实现以下核心能力：
 
-- **🤖 智能内容处理**：自动处理AI对话记录、文章、文档等多种输入格式
-- **🔗 双向链接系统**：支持 `[[概念名]]` 语法的智能概念链接和跳转
-- **📊 知识图谱可视化**：构建交互式概念关系图谱
-- **💾 向量语义检索**：基于语义相似度的智能文档检索
-- **🌐 Web控制台**：现代化的前端操作界面
-- **🔄 增量更新机制**：智能合并新旧内容，维护知识库一致性
+- ** 智能内容处理**：自动处理AI对话记录、文章、文档等多种输入格式
+- ** 双向链接系统**：支持 `[[概念名]]` 语法的智能概念链接和跳转
+- ** 知识图谱可视化**：构建交互式概念关系图谱
+- ** 向量语义检索**：基于语义相似度的智能文档检索
+- ** Web控制台**：现代化的前端操作界面
+- ** 增量更新机制**：智能合并新旧内容，维护知识库一致性
 
-### 🌟 核心价值主张
+###  核心价值主张
 
 - **自动化处理**：减少90%的手动整理工作
 - **智能链接发现**：自动建立概念间的关联关系
@@ -29,7 +29,7 @@
 - **标准化输出**：统一的Markdown格式知识笔记
 - **实时协作**：支持多用户场景下的知识库管理
 
-## 🏗️ 系统架构
+##  系统架构
 
 ### 整体架构设计
 
@@ -85,7 +85,7 @@ graph TB
     ORCH --> FS
 ```
 
-### 🎭 Agent架构模式
+###  Agent架构模式
 
 采用 **编排者-工作者模式** (Orchestrator-Worker Pattern)：
 
@@ -121,7 +121,7 @@ interface AgentArchitecture {
 }
 ```
 
-### 🔄 处理流程
+###  处理流程
 
 ```mermaid
 sequenceDiagram
@@ -158,9 +158,9 @@ sequenceDiagram
     Web->>User: 展示结果与链接
 ```
 
-## 🤖 Agent详细设计
+##  Agent详细设计
 
-### 🎭 KnowledgeOrchestrator (主编排Agent)
+###  KnowledgeOrchestrator (主编排Agent)
 
 ```typescript
 interface KnowledgeOrchestrator {
@@ -193,7 +193,7 @@ interface KnowledgeOrchestrator {
 - 实时进度监控与状态管理
 - 自适应策略调整与错误恢复
 
-### 🔍 ContentParser (内容解析工作者)
+###  ContentParser (内容解析工作者)
 
 ```typescript
 interface ContentParser {
@@ -225,7 +225,7 @@ interface ContentParser {
 - 基于TF-IDF和语义嵌入的重要性评分
 - 自适应分段算法，保持语义完整性
 
-### 🏗️ StructureBuilder (结构构建工作者)
+###  StructureBuilder (结构构建工作者)
 
 ```typescript
 interface StructureBuilder {
@@ -269,7 +269,7 @@ interface StructureBuilder {
 - 标题层级的逻辑一致性检查
 - Markdown语法的格式规范性校验
 
-### 🔗 LinkDiscoverer (链接发现工作者)
+###  LinkDiscoverer (链接发现工作者)
 
 ```typescript
 interface LinkDiscoverer {
@@ -301,7 +301,7 @@ interface LinkDiscoverer {
 - 余弦相似度计算与阈值过滤
 - 图论算法优化链接网络结构
 
-## 🔗 双向链接系统
+##  双向链接系统
 
 ### 核心架构
 
@@ -336,7 +336,7 @@ interface LinkingSystem {
 }
 ```
 
-### 🗄️ 数据库设计
+###  数据库设计
 
 ```sql
 -- 文档元数据表
@@ -371,7 +371,7 @@ CREATE TABLE concept_documents (
 );
 ```
 
-### 🎨 链接渲染策略
+###  链接渲染策略
 
 #### HTML渲染
 ```typescript
@@ -413,7 +413,7 @@ interface LinkMatchingLogic {
 }
 ```
 
-## 📊 知识图谱系统
+##  知识图谱系统
 
 ### 图谱架构
 
@@ -454,7 +454,7 @@ interface ConceptGraphSystem {
 - **聚类分析**：自动识别概念群组
 - **实时更新**：支持图谱的增量更新
 
-## 💾 存储架构
+##  存储架构
 
 ### 多层存储设计
 
@@ -496,7 +496,7 @@ interface StorageArchitecture {
 - **增量同步**：只处理变化的内容部分
 - **冲突解决**：智能合并策略处理并发修改
 
-## 🎨 前端架构
+##  前端架构
 
 ### 技术栈
 
@@ -544,7 +544,7 @@ interface FrontendArchitecture {
 - **智能过滤**：按类型、权重、时间过滤
 - **路径分析**：概念间关联路径展示
 
-## 🔄 长文本处理策略
+##  长文本处理策略
 
 ### 层次化处理 (Hierarchical Processing)
 
@@ -623,7 +623,7 @@ interface StrategySelection {
 }
 ```
 
-## ⚙️ API设计
+##  API设计
 
 ### RESTful API规范
 
@@ -693,7 +693,7 @@ interface WebSocketEvents {
 }
 ```
 
-## 🧪 测试策略
+##  测试策略
 
 ### 测试金字塔
 
@@ -740,7 +740,7 @@ interface PerformanceTargets {
 }
 ```
 
-## 🚀 部署架构
+##  部署架构
 
 ### 容器化部署
 
@@ -816,7 +816,7 @@ jobs:
           # 部署脚本
 ```
 
-## 📊 监控与运维
+##  监控与运维
 
 ### 系统监控
 
@@ -871,7 +871,7 @@ interface LoggingStrategy {
 }
 ```
 
-## 🛣️ 发展路线图
+##  发展路线图
 
 ### 短期目标 (Q3 2024)
 
@@ -932,7 +932,7 @@ interface LongTermGoals {
 }
 ```
 
-## 📈 性能指标
+##  性能指标
 
 ### 核心KPI
 
@@ -964,7 +964,7 @@ interface PerformanceKPIs {
 }
 ```
 
-## 🔒 安全考虑
+##  安全考虑
 
 ### 安全架构
 
@@ -1004,11 +1004,11 @@ interface SecurityArchitecture {
 }
 ```
 
-## 📝 总结
+##  总结
 
 Knowledge Agent智能知识整理系统基于现代多Agent架构和双向链接技术，提供了完整的知识管理解决方案：
 
-### 🎯 核心优势
+###  核心优势
 
 1. **智能化程度高**：全自动处理，大幅减少人工干预
 2. **架构设计先进**：模块化Agent设计，易于扩展和维护  
@@ -1016,7 +1016,7 @@ Knowledge Agent智能知识整理系统基于现代多Agent架构和双向链接
 4. **技术栈现代化**：采用最新的技术栈和最佳实践
 5. **可扩展性强**：支持企业级部署和定制化需求
 
-### 🚀 创新特性
+###  创新特性
 
 - **双向链接系统**：真正可点击跳转的概念链接
 - **概念图谱可视化**：交互式知识网络导航
@@ -1024,7 +1024,7 @@ Knowledge Agent智能知识整理系统基于现代多Agent架构和双向链接
 - **实时协作支持**：多用户场景下的知识库管理
 - **全栈技术整合**：从AI处理到前端展示的完整闭环
 
-### 📈 预期价值
+###  预期价值
 
 通过实施本系统，预期能够：
 - **提升90%+的知识整理效率**
@@ -1036,6 +1036,6 @@ Knowledge Agent智能知识整理系统基于现代多Agent架构和双向链接
 
 ---
 
-**文档状态**: ✅ 已完成  
+**文档状态**:  已完成  
 **下次更新**: 根据实施进展和技术演进更新  
 **维护者**: Plutoxx28
