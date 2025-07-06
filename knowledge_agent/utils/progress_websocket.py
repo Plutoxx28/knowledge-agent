@@ -254,35 +254,9 @@ def create_progress_callback() -> ProgressBroadcaster:
     return ProgressBroadcaster()
 
 if __name__ == "__main__":
-    # 测试WebSocket服务器
-    import sys
-    
-    async def test_server():
-        server = ProgressWebSocketServer()
-        await server.start_server()
-        
-        # 模拟进度更新
-        for i in range(5):
-            await asyncio.sleep(2)
-            await server.broadcast_progress({
-                "task_id": "test-task",
-                "complexity": "medium_task",
-                "stage": "worker_processing",
-                "current_step": f"步骤 {i+1}",
-                "total_steps": 5,
-                "completed_steps": i+1,
-                "workers": ["内容解析器", "结构构建器"],
-                "progress_percent": (i+1) / 5 * 100
-            })
-        
-        await server.stop_server()
-    
-    if len(sys.argv) > 1 and sys.argv[1] == "test":
-        asyncio.run(test_server())
-    else:
-        # 启动服务器
-        start_global_websocket_server()
-        try:
-            asyncio.get_event_loop().run_forever()
-        except KeyboardInterrupt:
-            print("服务器已停止")
+    # 启动服务器
+    start_global_websocket_server()
+    try:
+        asyncio.get_event_loop().run_forever()
+    except KeyboardInterrupt:
+        print("服务器已停止")

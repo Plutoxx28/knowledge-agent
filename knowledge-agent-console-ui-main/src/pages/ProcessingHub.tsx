@@ -41,7 +41,7 @@ const ProcessingHub = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('');
   const [processingSteps, setProcessingSteps] = useState<Array<{step: string, status: 'pending' | 'processing' | 'completed' | 'error', message?: string}>>([]);
-  const [wsTestResult, setWsTestResult] = useState<string>('');
+
   const [forceUpdate, setForceUpdate] = useState(0);
   const { toast } = useToast();
 
@@ -110,7 +110,6 @@ const ProcessingHub = () => {
     setError(null);
     setResult(null);
     setCurrentStatus('初始化处理...');
-    setWsTestResult('');
     
     // 清空步骤，等待后端动态发送
     setProcessingSteps([]);
@@ -388,7 +387,6 @@ const ProcessingHub = () => {
     setProgress(0);
     setCurrentStatus('');
     setProcessingSteps([]);
-    setWsTestResult('');
   };
 
     const handleFileUpload = async (file: File) => {
@@ -641,81 +639,7 @@ const ProcessingHub = () => {
     }
   };
 
-  // WebSocket连接测试函数
-  const testWebSocketConnection = async () => {
-    console.log('🧪 ===== 开始WebSocket连接测试 =====');
-    setWsTestResult('正在测试WebSocket连接...');
-    
-    try {
-      console.log('🔍 检查WebSocket当前状态...');
-      console.log('🔍 当前连接状态:', progressWebSocket.isConnected());
-      
-      // 先测试API连接
-      console.log('🌐 测试API连接到 http://localhost:8000/health...');
-      try {
-        const healthResponse = await fetch('http://localhost:8000/health');
-        const healthData = await healthResponse.json();
-        console.log('✅ API健康检查成功:', healthData);
-      } catch (apiError) {
-        console.error('❌ API连接失败:', apiError);
-        setWsTestResult('❌ API服务器连接失败，请检查后端是否启动');
-        return;
-      }
-      
-      // 使用已有的progressWebSocket进行测试
-      if (progressWebSocket.isConnected()) {
-        console.log('✅ WebSocket已连接');
-        setWsTestResult('✅ WebSocket已连接');
-        return;
-      }
-      
-      console.log('🔌 WebSocket未连接，尝试连接...');
-      console.log('🔌 连接URL: ws://localhost:8000/ws/progress');
-      
-      // 如果未连接，尝试连接
-      await progressWebSocket.connect();
-      console.log('✅ WebSocket连接成功');
-      
-      // 测试是否能正常通信
-      const testListener = (message: any) => {
-        console.log('📨 测试中收到WebSocket消息:', message);
-        if (message.type === 'pong') {
-          console.log('✅ 收到pong回复，连接和通信正常');
-          setWsTestResult('✅ WebSocket连接和通信正常！');
-          progressWebSocket.removeListener(testListener);
-        }
-      };
-      
-      progressWebSocket.addListener(testListener);
-      console.log('👂 已添加测试监听器');
-      
-      // 发送ping测试消息
-      if (progressWebSocket.isConnected()) {
-        console.log('✅ WebSocket连接确认成功！');
-        setWsTestResult('✅ WebSocket连接成功！');
-        progressWebSocket.removeListener(testListener);
-      } else {
-        throw new Error('连接状态检查失败');
-      }
-      
-    } catch (error) {
-      console.error('❌ WebSocket连接测试失败:', error);
-      console.error('❌ 错误详情:', error);
-      const errorMsg = error instanceof Error ? error.message : 'WebSocket连接失败';
-      setWsTestResult(`❌ 连接失败: ${errorMsg}`);
-      
-      // 检查常见问题
-      console.log('🔍 故障排查信息:');
-      console.log('🔍 - 请确认后端API服务器在 http://localhost:8000 运行');
-      console.log('🔍 - 请确认WebSocket端点 ws://localhost:8000/ws/progress 可用');
-      console.log('🔍 - 请检查网络连接和防火墙设置');
-    }
-    
-    // 3秒后自动清除结果
-    setTimeout(() => {
-      setWsTestResult('');
-    }, 5000);
-  };
+
 
   return (
     <div className="space-y-6">
@@ -725,25 +649,6 @@ const ProcessingHub = () => {
           <p className="text-gray-600 mt-1 my-[15px]">智能处理各种内容，生成结构化知识</p>
         </div>
         <div className="flex items-center gap-4">
-          <Button 
-            variant="outline" 
-            onClick={testWebSocketConnection}
-            className="flex items-center gap-2"
-          >
-            <span className="text-blue-600">🔗</span>
-            测试连接
-          </Button>
-          {wsTestResult && (
-            <div className="text-sm px-3 py-1 rounded-full bg-gray-100">
-              {wsTestResult}
-            </div>
-          )}
-          <div className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">
-            WebSocket: {progressWebSocket.isConnected() ? '🟢 已连接' : '🔴 未连接'}
-          </div>
-          <div className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">
-            进度: {progress}%
-          </div>
         </div>
       </div>
 
@@ -1006,36 +911,9 @@ const ProcessingHub = () => {
               <CardTitle>处理结果</CardTitle>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="preview">
-                <TabsList>
-                  <TabsTrigger value="preview">预览</TabsTrigger>
-                  <TabsTrigger value="raw">原始内容</TabsTrigger>
-                  <TabsTrigger value="stats">统计信息</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="preview" className="mt-4">
-                  <div className="prose max-w-none">
-                    <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
-                      {typeof result.content === 'string' ? renderDoubleLinks(result.content) : result.content}
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="raw" className="mt-4">
-                  <pre className="bg-gray-50 p-4 rounded-lg text-sm overflow-x-auto">
-                    {result.content}
-                  </pre>
-                </TabsContent>
-
-                <TabsContent value="stats" className="mt-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <StatCard title="概念数量" value={result.statistics.conceptCount} icon={<Hash className="h-4 w-4" />} />
-                    <StatCard title="内部链接" value={result.statistics.internalLinks} icon={<Link className="h-4 w-4" />} />
-                    <StatCard title="处理时长" value={`${result.statistics.processingTime}s`} icon={<Clock className="h-4 w-4" />} />
-                    <StatCard title="质量评分" value={`${result.statistics.qualityScore}/100`} icon={<Star className="h-4 w-4" />} />
-                  </div>
-                </TabsContent>
-              </Tabs>
+              <pre className="bg-gray-50 p-4 rounded-lg text-sm overflow-x-auto">
+                {result.content}
+              </pre>
 
               <div className="mt-4 flex gap-2">
                 <Button>
@@ -1045,14 +923,6 @@ const ProcessingHub = () => {
                 <Button variant="outline">
                   <Copy className="mr-2 h-4 w-4" />
                   复制内容
-                </Button>
-                <Button variant="outline">
-                  <Download className="mr-2 h-4 w-4" />
-                  导出文件
-                </Button>
-                <Button variant="outline">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  查看链接
                 </Button>
               </div>
             </CardContent>
