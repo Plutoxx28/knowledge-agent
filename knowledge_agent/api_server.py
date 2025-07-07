@@ -395,7 +395,7 @@ async def process_content(request: ProcessingRequest):
         
         logger.info(f"🚀 开始处理内容，长度: {len(request.content)} 字符")
         
-        # 使用简化处理器
+        # 使用AI编排处理器（默认启用）
         result = await simple_processor.process_content(
             content=request.content,
             content_type=request.type,
@@ -404,7 +404,8 @@ async def process_content(request: ProcessingRequest):
                 "enable_linking": request.options.enableLinking,
                 "enable_vector_db": request.options.enable_vector_db,
                 "force_structure": request.options.force_structure,
-                "batch_mode": False
+                "batch_mode": False,
+                "enable_ai_orchestration": True  # 启用AI编排
             }
         )
         

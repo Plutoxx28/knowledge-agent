@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,7 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { StatCard } from '@/components/ui/stat-card';
-import { TagInput } from '@/components/ui/tag-input';
+
 import { Play, X, Hash, Link, Clock, Star, Save, Copy, Download, ExternalLink, ChevronRight, Upload, FileText, MessageSquare, Globe } from 'lucide-react';
 import { apiClient, progressWebSocket, formatError, type ProcessingOptions, type ProcessingResponse } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -122,7 +122,7 @@ const ProcessingHub = () => {
         type: inputMode,
         metadata: {
           source: metadata.source || 'user_input',
-          tags: metadata.tags,
+          tags: [],
           timestamp: new Date().toISOString()
         },
         options: options
@@ -378,10 +378,6 @@ const ProcessingHub = () => {
   };
   const handleClearInput = () => {
     setContent('');
-    setMetadata({
-      source: '',
-      tags: []
-    });
     setResult(null);
     setError(null);
     setProgress(0);
@@ -737,23 +733,7 @@ const ProcessingHub = () => {
               </TabsContent>
             </Tabs>
 
-            {/* 元数据输入 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-sm font-medium">来源</Label>
-                <Input placeholder="内容来源" className="mt-1" value={metadata.source} onChange={e => setMetadata(prev => ({
-                ...prev,
-                source: e.target.value
-              }))} />
-              </div>
-              <div>
-                <Label className="text-sm font-medium">标签</Label>
-                <TagInput placeholder="添加标签" value={metadata.tags} onChange={tags => setMetadata(prev => ({
-                ...prev,
-                tags
-              }))} />
-              </div>
-            </div>
+
 
             {/* 操作按钮 */}
             <div className="flex gap-2 pt-2">
@@ -781,7 +761,7 @@ const ProcessingHub = () => {
               {/* 总体进度 */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="font-medium">{currentStatus || '正在初始化...'}</span>
+                  {/* <span className="font-medium">处理进度</span> */}
                   <span className="text-blue-600 font-semibold">{Math.round(progress)}%</span>
                 </div>
                 <div className="progress-enhanced h-3 w-full overflow-hidden rounded-full">
@@ -792,105 +772,17 @@ const ProcessingHub = () => {
                 </div>
               </div>
               
-              {/* 详细步骤 */}
+              {/* 简化的当前状态 */}
               <div className="space-y-3">
-                <h4 className="text-sm font-medium text-gray-700">处理步骤</h4>
-                <div className="space-y-2">
-                  {processingSteps.map((step, index) => (
-                    <div key={`${step.step}-${index}`} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50/50 border border-gray-100">
-                      <div className="flex-shrink-0">
-                        {step.status === 'completed' && (
-                          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
-                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </div>
-                        )}
-                        {step.status === 'processing' && (
-                          <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-                            <Spinner className="w-4 h-4 text-white" />
-                          </div>
-                        )}
-                        {step.status === 'pending' && (
-                          <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
-                            <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
-                          </div>
-                        )}
-                        {step.status === 'error' && (
-                          <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
-                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div className={`text-sm font-medium ${
-                          step.status === 'completed' ? 'text-green-700' :
-                          step.status === 'processing' ? 'text-blue-700' :
-                          step.status === 'error' ? 'text-red-700' :
-                          'text-gray-500'
-                        }`}>
-                          {step.message}
-                        </div>
-                        {step.status === 'processing' && (
-                          <div className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                            <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse"></div>
-                            正在执行中...
-                          </div>
-                        )}
-                        {step.status === 'completed' && (
-                          <div className="text-xs text-green-600 mt-1">
-                            ✓ 已完成
-                          </div>
-                        )}
-                        {step.status === 'pending' && index === 0 && processingSteps.every(s => s.status === 'pending') && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            等待开始...
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-shrink-0">
-                        {step.status === 'processing' && (
-                          <div className="flex items-center text-xs text-blue-600">
-                            <Clock className="w-3 h-3 mr-1" />
-                            进行中
-                          </div>
-                        )}
-                        {step.status === 'completed' && (
-                          <div className="flex items-center text-xs text-green-600">
-                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            完成
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* 处理提示信息 */}
-                {processingSteps.length > 0 && (
-                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <div className="text-xs text-blue-700">
-                        <div className="font-medium mb-1">处理信息</div>
-                        <div>
-                          系统正在智能分析内容复杂度，并自动选择合适的工作者Agent进行处理。
-                          {processingSteps.some(step => step.message.includes('工作者')) && (
-                            <span className="block mt-1">
-                              当前有多个专业Agent协同工作，确保处理质量和效率。
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                <h4 className="text-sm font-medium text-gray-700">当前状态</h4>
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200">
+                  <Spinner className="w-5 h-5 text-blue-600" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-blue-700">
+                      {currentStatus || '正在处理...'}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             </CardContent>
           </Card>}
@@ -916,10 +808,6 @@ const ProcessingHub = () => {
               </pre>
 
               <div className="mt-4 flex gap-2">
-                <Button>
-                  <Save className="mr-2 h-4 w-4" />
-                  保存到知识库
-                </Button>
                 <Button variant="outline">
                   <Copy className="mr-2 h-4 w-4" />
                   复制内容
