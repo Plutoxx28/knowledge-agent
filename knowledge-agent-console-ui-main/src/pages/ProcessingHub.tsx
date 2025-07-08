@@ -386,6 +386,39 @@ const ProcessingHub = () => {
     setProcessingSteps([]);
   };
 
+  const handleCopyContent = async () => {
+    if (!result?.content) return;
+    
+    try {
+      await navigator.clipboard.writeText(result.content);
+      toast({
+        title: "复制成功",
+        description: "内容已复制到剪贴板",
+      });
+    } catch (err) {
+      // 如果现代API失败，尝试使用传统方法
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = result.content;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        toast({
+          title: "复制成功",
+          description: "内容已复制到剪贴板",
+        });
+      } catch (fallbackErr) {
+        toast({
+          title: "复制失败",
+          description: "无法复制到剪贴板，请手动选择复制",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -501,7 +534,7 @@ const ProcessingHub = () => {
               </pre>
 
               <div className="mt-4 flex gap-2">
-                <Button variant="outline">
+                <Button variant="outline" onClick={handleCopyContent}>
                   <Copy className="mr-2 h-4 w-4" />
                   复制内容
                 </Button>
