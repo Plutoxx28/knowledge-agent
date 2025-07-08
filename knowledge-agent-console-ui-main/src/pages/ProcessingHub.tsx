@@ -230,13 +230,20 @@ const ProcessingHub = () => {
                 
                 // 更新步骤状态
                 const stage = progressData.stage;
-                const isCompleted = stage === 'completed' || progressData.progress_percent === 100;
+                const isCompleted = stage === 'completed';
                 
                 // 找到当前阶段对应的步骤
                 const stageMapping = {
+                  'planning': 0,
+                  'tool_creation': 1,
                   'analyzing': 0,
+                  'analysis': 0,
                   'generating_workers': 1,
                   'worker_processing': newSteps.length > 3 ? 2 : 1,
+                  'extraction': newSteps.length > 3 ? 2 : 1,
+                  'enhancement': newSteps.length > 3 ? 2 : 1,
+                  'quality_control': newSteps.length - 2,
+                  'synthesis': newSteps.length - 2,
                   'finalizing': newSteps.length - 2,
                   'completed': newSteps.length - 1
                 };
@@ -261,11 +268,15 @@ const ProcessingHub = () => {
                   }
                 });
                 
-                // 如果处理完成，标记所有步骤为完成
+                // 如果处理完成，标记所有步骤为完成并停止处理状态
                 if (isCompleted) {
                   newSteps.forEach((step, index) => {
                     newSteps[index] = { ...step, status: 'completed' };
                   });
+                  // 在下一个tick中停止处理状态，避免100%时还显示处理中
+                  setTimeout(() => {
+                    setProcessing(false);
+                  }, 100);
                 }
                 
                 // 如果有工作者信息，更新相关步骤的消息
@@ -333,6 +344,9 @@ const ProcessingHub = () => {
           setCurrentStatus('处理完成！');
           setProgress(100);
           console.log('✅ 设置进度为100%');
+          
+          // 立即停止处理状态，避免100%时还显示处理中
+          setProcessing(false);
           
           setResult({
             content: response.result?.structured_content || response.result?.content || '处理完成',
@@ -580,38 +594,49 @@ const ProcessingHub = () => {
               </div>
               
               {/* 发光流水进度条 */}
-              <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-4 shadow-inner">
-                {/* 基础进度条 */}
-                <div 
-                  className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out"
-                  style={{ 
-                    width: `${Math.max(0, Math.min(100, progress))}%`,
-                    background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
-                    boxShadow: '0 0 8px rgba(59, 130, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
-                  }}
-                />
+              <div className="relative w-full h-4 mb-4">
+                {/* 进度条轨道 */}
+                <div className="w-full h-4 bg-gray-200 rounded-full shadow-inner"></div>
                 
-                {/* 水波纹激光效果 */}
+                {/* 外围激光脉冲 - 横向扫描 */}
                 <div 
-                  className="absolute top-0 left-0 h-full rounded-full"
+                  className="absolute top-0 left-0 h-4 rounded-full overflow-hidden"
                   style={{ 
                     width: `${Math.max(0, Math.min(100, progress))}%`,
-                    background: 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.4), rgba(59, 130, 246, 0.6), transparent)',
-                    backgroundSize: '200% 100%',
-                    animation: 'water-ripple 3s ease-in-out infinite'
+                    background: 'transparent',
+                    boxShadow: '0 0 8px rgba(59, 130, 246, 0.3)'
                   }}
-                />
+                >
+                  {/* 横向脉冲光带 */}
+                  <div 
+                    className="absolute top-0 h-4 rounded-full"
+                    style={{ 
+                      width: '30%',
+                      background: 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 1), rgba(59, 130, 246, 0.8), transparent)',
+                      boxShadow: '0 0 20px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.4)',
+                      animation: 'horizontal-pulse 2s ease-in-out infinite'
+                    }}
+                  />
+                </div>
                 
-                {/* 柔和光波 */}
+                                 {/* 进度条主体 - 蓝色基础 */}
                 <div 
-                  className="absolute top-0 left-0 h-full rounded-full opacity-50"
+                  className="absolute top-0 left-0 h-4 rounded-full transition-all duration-500 ease-out overflow-hidden"
                   style={{ 
                     width: `${Math.max(0, Math.min(100, progress))}%`,
-                    background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent)',
-                    backgroundSize: '40% 100%',
-                    animation: 'soft-wave 4s ease-in-out infinite'
+                    background: 'linear-gradient(90deg, #1e40af, #3b82f6, #60a5fa)'
                   }}
-                />
+                >
+                  {/* 纯蓝色透明度水波纹 */}
+                  <div 
+                    className="absolute top-0 left-0 w-full h-full"
+                    style={{ 
+                      background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.6), rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.7), rgba(59, 130, 246, 0.2))',
+                      backgroundSize: '150% 100%',
+                      animation: 'water-ripple-internal 2.5s ease-in-out infinite'
+                    }}
+                  />
+                </div>
               </div>
               
               {/* 当前状态 */}

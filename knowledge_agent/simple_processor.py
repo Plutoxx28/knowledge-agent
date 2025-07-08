@@ -36,19 +36,59 @@ class SimpleProgressTracker:
     def __init__(self, websocket_broadcast_func: Optional[Callable] = None):
         self.websocket_broadcast = websocket_broadcast_func
         self.task_id = str(uuid.uuid4())
+        self.stage_weights = {
+            "planning": 10,
+            "tool_creation": 5,
+            "analysis": 20,
+            "extraction": 25,
+            "enhancement": 15,
+            "quality_control": 10,
+            "synthesis": 10
+        }
+        self.completed_progress = 0
         
-    async def update_progress(self, stage: str, message: str, progress_percent: int, workers: List[str] = None):
+    def _calculate_stage_progress(self, stage: str, stage_progress: float = 1.0) -> int:
+        """计算阶段进度的整体百分比"""
+        stage_weight = self.stage_weights.get(stage, 10)
+        stage_contribution = stage_weight * stage_progress
+        total_progress = self.completed_progress + stage_contribution
+        return min(100, int(total_progress))
+        
+    def _complete_stage(self, stage: str):
+        """标记阶段完成，更新已完成进度"""
+        stage_weight = self.stage_weights.get(stage, 10)
+        self.completed_progress += stage_weight
+        self.completed_progress = min(100, self.completed_progress)
+        
+    async def update_progress(self, stage: str, message: str, progress_percent: int = None, workers: List[str] = None, stage_progress: float = None):
         """更新进度"""
+        # 计算实际进度百分比
+        if progress_percent is not None:
+            # 使用指定的进度百分比（仅用于外部直接设置）
+            actual_progress = progress_percent
+        elif stage_progress is not None:
+            # 使用阶段进度计算（推荐方式）
+            actual_progress = self._calculate_stage_progress(stage, stage_progress)
+        else:
+            # 默认使用阶段完成度计算
+            actual_progress = self._calculate_stage_progress(stage, 1.0)
+            
+        # 如果是completed阶段，确保设置为100%
+        if stage == "completed":
+            actual_progress = 100
+            # 确保不会超过100%
+            self.completed_progress = 100
+        
         progress_data = {
             "task_id": self.task_id,
             "stage": stage,
             "current_step": message,
-            "progress_percent": progress_percent,
+            "progress_percent": actual_progress,
             "workers": workers or [],
             "timestamp": time.time()
         }
         
-        logger.info(f"进度更新: {stage} - {message} ({progress_percent}%)")
+        logger.info(f"进度更新: {stage} - {message} ({actual_progress}%)")
         
         if self.websocket_broadcast:
             try:
@@ -279,20 +319,22 @@ class AIToolOrchestrator:
             check_should_stop(task_id)
             
             # 第一步：AI分析内容并制定处理计划
-            await tracker.update_progress("planning", "AI分析内容并制定处理方案...", 5, ["策略规划器"])
+            await tracker.update_progress("planning", "AI分析内容并制定处理方案...", stage_progress=0.3)
             
             processing_plan = await self._ai_create_processing_plan(content, content_type)
             
-            await tracker.update_progress("planning", f"处理方案制定完成 - {processing_plan.get('strategy_name', '智能处理')}", 10)
+            await tracker.update_progress("planning", f"处理方案制定完成 - {processing_plan.get('strategy_name', '智能处理')}", stage_progress=1.0)
+            tracker._complete_stage("planning")
             
             # 检查是否应该停止
             check_should_stop(task_id)
             
             # 第二步：创建AI设计的复合工具（如果需要）
             if processing_plan.get("create_composite_tools"):
-                await tracker.update_progress("tool_creation", "AI创建专用处理工具...", 15, ["工具构建器"])
+                await tracker.update_progress("tool_creation", "AI创建专用处理工具...", stage_progress=0.5)
                 self._create_composite_tools(processing_plan["create_composite_tools"])
-                await tracker.update_progress("tool_creation", f"创建了 {len(processing_plan['create_composite_tools'])} 个专用工具", 20)
+                await tracker.update_progress("tool_creation", f"创建了 {len(processing_plan['create_composite_tools'])} 个专用工具", stage_progress=1.0)
+                tracker._complete_stage("tool_creation")
             
             # 检查是否应该停止
             check_should_stop(task_id)
@@ -304,19 +346,25 @@ class AIToolOrchestrator:
             check_should_stop(task_id)
             
             # 第四步：Pro模型质量控制
-            await tracker.update_progress("quality_control", "Pro模型质量检查中...", 85, ["质量控制器"])
+            await tracker.update_progress("quality_control", "Pro模型质量检查中...", stage_progress=0.5)
             
             quality_results = await self._run_quality_control(results, processing_plan)
+            
+            await tracker.update_progress("quality_control", "质量检查完成", stage_progress=1.0)
+            tracker._complete_stage("quality_control")
             
             # 检查是否应该停止
             check_should_stop(task_id)
             
             # 第五步：Pro模型最终合成
-            await tracker.update_progress("synthesis", "Pro模型最终合成中...", 90, ["结果合成器"])
+            await tracker.update_progress("synthesis", "Pro模型最终合成中...", stage_progress=0.5)
             
             final_content = await self._final_synthesis(results, quality_results, processing_plan)
             
-            await tracker.update_progress("completed", "AI智能处理完成！", 100)
+            await tracker.update_progress("synthesis", "最终合成完成", stage_progress=1.0)
+            tracker._complete_stage("synthesis")
+            
+            await tracker.update_progress("completed", "AI智能处理完成！", progress_percent=100)
             
             # 记录执行历史
             self._record_execution_history(content, processing_plan, results, final_content)
@@ -1189,7 +1237,6 @@ class AIToolOrchestrator:
         """执行AI制定的处理计划"""
         
         results = {"content": content, "original_content": content}
-        current_progress = 20  # 从计划制定后开始
         
         try:
             for phase_config in plan.get("execution_phases", []):
@@ -1199,13 +1246,13 @@ class AIToolOrchestrator:
                 phase_name = phase_config["phase"]
                 tools = phase_config["tools"]
                 execution_type = phase_config.get("execution_type", "sequential")
-                progress_weight = phase_config.get("progress_weight", 20)
                 
+                # 开始处理阶段
                 await tracker.update_progress(
                     phase_name, 
                     f"执行{phase_name}阶段处理...", 
-                    current_progress,
-                    tools
+                    stage_progress=0.3,
+                    workers=tools
                 )
                 
                 # 根据执行类型处理
@@ -1217,12 +1264,15 @@ class AIToolOrchestrator:
                 # 合并结果
                 results.update(phase_results)
                 
-                current_progress += progress_weight
+                # 完成阶段
                 await tracker.update_progress(
                     phase_name,
                     f"{phase_name}阶段完成",
-                    min(current_progress, 85)  # 确保不超过85%，为后续步骤留空间
+                    stage_progress=1.0
                 )
+                
+                # 标记阶段完成，更新累积进度
+                tracker._complete_stage(phase_name)
             
             return results
             
@@ -1718,36 +1768,39 @@ class SimpleKnowledgeProcessor:
             # 检查是否应该停止
             check_should_stop(task_id)
             
-            # 阶段1: 开始分析 (0-20%)
-            await tracker.update_progress("analyzing", "AI分析内容中...", 10, ["AI分析器"])
+            # 阶段1: 分析阶段
+            await tracker.update_progress("analysis", "AI分析内容中...", stage_progress=0.5, workers=["AI分析器"])
             
             # 使用AI分析内容
             analysis = await self._ai_analyze_content(content)
-            await tracker.update_progress("analyzing", "AI分析完成", 20)
+            await tracker.update_progress("analysis", "AI分析完成", stage_progress=1.0)
+            tracker._complete_stage("analysis")
             
             # 检查是否应该停止
             check_should_stop(task_id)
             
-            # 阶段2: 概念提取 (20-50%)
-            await tracker.update_progress("worker_processing", "AI概念提取中...", 30, ["概念提取器"])
+            # 阶段2: 概念提取阶段
+            await tracker.update_progress("extraction", "AI概念提取中...", stage_progress=0.5, workers=["概念提取器"])
             
             concepts = await self._ai_extract_concepts(content)
-            await tracker.update_progress("worker_processing", "概念提取完成", 50)
+            await tracker.update_progress("extraction", "概念提取完成", stage_progress=1.0)
+            tracker._complete_stage("extraction")
             
             # 检查是否应该停止
             check_should_stop(task_id)
             
-            # 阶段3: 结构化处理 (50-80%)
-            await tracker.update_progress("worker_processing", "结构化构建中...", 60, ["结构构建器"])
+            # 阶段3: 结构化处理阶段
+            await tracker.update_progress("enhancement", "结构化构建中...", stage_progress=0.5, workers=["结构构建器"])
             
             structured_content = await self._ai_structure_content(content, concepts, analysis)
-            await tracker.update_progress("worker_processing", "结构化完成", 80)
+            await tracker.update_progress("enhancement", "结构化完成", stage_progress=1.0)
+            tracker._complete_stage("enhancement")
             
             # 检查是否应该停止
             check_should_stop(task_id)
             
-            # 阶段4: 完成处理 (80-100%)
-            await tracker.update_progress("finalizing", "保存处理结果...", 90, ["文件管理器"])
+            # 阶段4: 合成阶段
+            await tracker.update_progress("synthesis", "保存处理结果...", stage_progress=0.5, workers=["文件管理器"])
             
             # 检查AI处理是否成功
             ai_success = not (analysis.get('error') or any('error' in str(c) for c in concepts))
@@ -1769,7 +1822,10 @@ class SimpleKnowledgeProcessor:
                 }
             }
             
-            await tracker.update_progress("completed", "处理完成！", 100)
+            await tracker.update_progress("synthesis", "处理完成", stage_progress=1.0)
+            tracker._complete_stage("synthesis")
+            
+            await tracker.update_progress("completed", "处理完成！", progress_percent=100)
             
             return {
                 "success": True,

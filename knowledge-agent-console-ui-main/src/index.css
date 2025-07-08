@@ -156,38 +156,40 @@ All colors MUST be HSL.
     100% { left: 100%; }
   }
   
-  /* 水波纹激光效果 */
-  @keyframes water-ripple {
+  /* 横向脉冲效果 */
+  @keyframes horizontal-pulse {
     0% {
-      background-position: -200% 0;
-      opacity: 0.8;
+      left: -30%;
+      opacity: 0;
+    }
+    20% {
+      opacity: 1;
+    }
+    80% {
+      opacity: 1;
+    }
+    100% {
+      left: 100%;
+      opacity: 0;
+    }
+  }
+  
+  /* 内部水波纹效果 */
+  @keyframes water-ripple-internal {
+    0% {
+      background-position: -150% 0;
+      opacity: 0.7;
     }
     50% {
       opacity: 1;
     }
     100% {
-      background-position: 200% 0;
-      opacity: 0.8;
+      background-position: 250% 0;
+      opacity: 0.7;
     }
   }
   
-  /* 柔和光波 */
-  @keyframes soft-wave {
-    0% {
-      background-position: -150% 0;
-      opacity: 0.3;
-    }
-    33% {
-      opacity: 0.6;
-    }
-    66% {
-      opacity: 0.4;
-    }
-    100% {
-      background-position: 250% 0;
-      opacity: 0.3;
-    }
-  }
+
   
   /* 简化的进度条样式 */
   .progress-enhanced {
