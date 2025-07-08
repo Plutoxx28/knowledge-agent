@@ -1093,12 +1093,27 @@ class AIToolOrchestrator:
             else:
                 main_topic = "知识整理"
         
-        # 构建fallback内容
+        # 构建五部分结构
         structured_parts = [f"# {main_topic}"]
         
-        # 添加概念部分
+        # 1. 相关反向链接
+        structured_parts.append("\n## 相关反向链接\n")
         if concepts and len(concepts) > 0:
-            structured_parts.append("\n## 核心概念\n")
+            # 基于概念生成简单的反向链接
+            valid_concepts = [c for c in concepts[:5] if c.get('term') and len(c['term'].strip()) > 1]
+            if valid_concepts:
+                for concept in valid_concepts:
+                    term = concept['term'].strip()
+                    concept_type = concept.get('type', 'general')
+                    structured_parts.append(f"- [[{term}]] - {concept_type}相关主题")
+            else:
+                structured_parts.append("- 暂无相关链接")
+        else:
+            structured_parts.append("- 暂无相关链接")
+        
+        # 2. 相关概念
+        structured_parts.append("\n## 相关概念\n")
+        if concepts and len(concepts) > 0:
             valid_concepts = [c for c in concepts[:8] if c.get('term') and len(c['term'].strip()) > 1]
             if valid_concepts:
                 for concept in valid_concepts:
@@ -1110,9 +1125,24 @@ class AIToolOrchestrator:
                         structured_parts.append(f"- **[[{term}]]**")
             else:
                 structured_parts.append("- 暂无提取到有效概念")
+        else:
+            structured_parts.append("- 暂无提取到有效概念")
         
-        # 添加内容部分
+        # 3. 详细内容（完全保留原始输入）
         structured_parts.append(f"\n## 详细内容\n\n{content}")
+        
+        # 4. 扩展知识
+        structured_parts.append("\n## 扩展知识\n")
+        # 基于内容和概念生成简单的扩展知识
+        if concepts and len(concepts) > 0:
+            concept_types = list(set([c.get('type', 'general') for c in concepts if c.get('type')]))
+            if concept_types:
+                for concept_type in concept_types[:3]:
+                    structured_parts.append(f"- {concept_type}相关的深入学习")
+            else:
+                structured_parts.append("- 相关领域的深入学习")
+        else:
+            structured_parts.append("- 相关领域的深入学习")
         
         # 添加处理信息
         complexity = analysis.get('complexity', 'medium')
@@ -1446,12 +1476,30 @@ class AIToolOrchestrator:
                         "content": """你是一个专业的知识整理专家。请将所有处理结果整合为高质量的结构化Markdown文档。
 
 要求：
-1. 生成清晰的标题层级结构
+1. 生成清晰的五部分结构
 2. 为重要概念添加双链格式：[[概念名]]
-3. 整合所有分析结果和概念信息
-4. 保持逻辑清晰和内容完整
-5. 根据质量评估建议进行优化
-6. 生成专业的知识文档格式"""
+3. 完整保留原始内容
+4. 生成相关反向链接
+5. 提取扩展知识点
+6. 保持逻辑清晰和内容完整
+
+输出格式：
+# 标题
+
+## 相关反向链接
+- [[相关概念1]] - 关联说明
+- [[相关概念2]] - 关联说明
+
+## 相关概念
+- [[概念A]]：定义
+- [[概念B]]：定义
+
+## 详细内容
+原始输入内容（完全保留，不做任何修改）
+
+## 扩展知识
+- 扩展知识点1
+- 扩展知识点2"""
                     },
                     {
                         "role": "user",
@@ -1476,12 +1524,18 @@ class AIToolOrchestrator:
 
 处理策略：{plan.get('strategy_name', '标准处理')}
 
-请生成最终的高质量Markdown文档，确保：
-1. 标题结构清晰
-2. 概念使用[[双链]]格式
-3. 内容组织逻辑
-4. 包含核心概念列表
-5. 体现专业性和完整性"""
+请严格按照以下五部分结构生成文档：
+
+1. **相关反向链接**：基于提取的概念，生成可能相关的主题和概念链接
+2. **相关概念**：使用[[双链]]格式列出所有重要概念及其定义
+3. **详细内容**：原始输入内容完全保留，不做任何修改或删减
+4. **扩展知识**：从原始内容中识别出的可以深入学习的知识点和相关领域
+
+注意：
+- 标题应该基于内容分析的主题
+- 反向链接应该基于核心概念生成相关主题
+- 详细内容部分必须完全保留原始输入
+- 扩展知识应该提取文章中涉及但未详细展开的知识点"""
                     }
                 ],
                 max_tokens=2000
@@ -1864,7 +1918,32 @@ class SimpleKnowledgeProcessor:
                     messages=[
                         {
                             "role": "system",
-                            "content": "你是一个专业的知识整理专家。请将内容重新组织为结构化的Markdown格式。"
+                            "content": """你是一个专业的知识整理专家。请将内容重新组织为结构化的Markdown格式。
+
+要求：
+1. 生成清晰的五部分结构
+2. 为重要概念添加双链格式：[[概念名]]
+3. 完整保留原始内容
+4. 生成相关反向链接
+5. 提取扩展知识点
+
+输出格式：
+# 标题
+
+## 相关反向链接
+- [[相关概念1]] - 关联说明
+- [[相关概念2]] - 关联说明
+
+## 相关概念
+- [[概念A]]：定义
+- [[概念B]]：定义
+
+## 详细内容
+原始输入内容（完全保留，不做任何修改）
+
+## 扩展知识
+- 扩展知识点1
+- 扩展知识点2"""
                         },
                         {
                             "role": "user",
@@ -1875,13 +1954,18 @@ class SimpleKnowledgeProcessor:
 
 主要概念：{', '.join(concept_names)}
 
-要求：
-1. 使用清晰的Markdown标题结构
-2. 为重要概念添加双链格式：[[概念名]]
-3. 保持原意不变，但组织更清晰
-4. 添加核心概念列表
+请严格按照以下五部分结构生成文档：
 
-请返回重新整理后的Markdown内容。"""
+1. **相关反向链接**：基于主要概念，生成可能相关的主题和概念链接
+2. **相关概念**：使用[[双链]]格式列出所有重要概念及其定义
+3. **详细内容**：原始输入内容完全保留，不做任何修改或删减
+4. **扩展知识**：从原始内容中识别出的可以深入学习的知识点
+
+注意：
+- 标题应该基于内容主题
+- 反向链接应该基于核心概念生成相关主题
+- 详细内容部分必须完全保留原始输入
+- 扩展知识应该提取文章中涉及但未详细展开的知识点"""
                         }
                     ],
                     max_tokens=1500,
@@ -1916,12 +2000,27 @@ class SimpleKnowledgeProcessor:
             else:
                 main_topic = "知识整理"
         
-        # 构建更好的fallback内容
+        # 构建五部分结构
         structured_parts = [f"# {main_topic}"]
         
-        # 添加概念部分
+        # 1. 相关反向链接
+        structured_parts.append("\n## 相关反向链接\n")
         if concepts and len(concepts) > 0:
-            structured_parts.append("\n## 核心概念\n")
+            # 基于概念生成简单的反向链接
+            valid_concepts = [c for c in concepts[:5] if c.get('term') and len(c['term'].strip()) > 1]
+            if valid_concepts:
+                for concept in valid_concepts:
+                    term = concept['term'].strip()
+                    concept_type = concept.get('type', 'general')
+                    structured_parts.append(f"- [[{term}]] - {concept_type}相关主题")
+            else:
+                structured_parts.append("- 暂无相关链接")
+        else:
+            structured_parts.append("- 暂无相关链接")
+        
+        # 2. 相关概念
+        structured_parts.append("\n## 相关概念\n")
+        if concepts and len(concepts) > 0:
             valid_concepts = [c for c in concepts[:8] if c.get('term') and len(c['term'].strip()) > 1]
             if valid_concepts:
                 for concept in valid_concepts:
@@ -1933,9 +2032,24 @@ class SimpleKnowledgeProcessor:
                         structured_parts.append(f"- **[[{term}]]**")
             else:
                 structured_parts.append("- 暂无提取到有效概念")
+        else:
+            structured_parts.append("- 暂无提取到有效概念")
         
-        # 添加内容部分
+        # 3. 详细内容（完全保留原始输入）
         structured_parts.append(f"\n## 详细内容\n\n{content}")
+        
+        # 4. 扩展知识
+        structured_parts.append("\n## 扩展知识\n")
+        # 基于内容和概念生成简单的扩展知识
+        if concepts and len(concepts) > 0:
+            concept_types = list(set([c.get('type', 'general') for c in concepts if c.get('type')]))
+            if concept_types:
+                for concept_type in concept_types[:3]:
+                    structured_parts.append(f"- {concept_type}相关的深入学习")
+            else:
+                structured_parts.append("- 相关领域的深入学习")
+        else:
+            structured_parts.append("- 相关领域的深入学习")
         
         # 添加处理信息
         complexity = analysis.get('complexity', 'medium')
