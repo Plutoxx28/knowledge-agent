@@ -76,6 +76,14 @@ simple_processor = None
 # 简化的WebSocket连接管理
 active_websocket_connections = set()
 
+# 全局任务管理
+active_tasks = {}
+
+# 自定义异常
+class ProcessingStoppedException(Exception):
+    """处理被用户停止的异常"""
+    pass
+
 # Pydantic 模型定义
 class ProcessingOptions(BaseModel):
     strategy: str = Field(default="standard", description="处理策略")
@@ -393,7 +401,13 @@ async def process_content(request: ProcessingRequest):
         if not simple_processor:
             raise HTTPException(status_code=500, detail="简化处理器未初始化")
         
-        logger.info(f"🚀 开始处理内容，长度: {len(request.content)} 字符")
+        import uuid
+        task_id = str(uuid.uuid4())
+        
+        logger.info(f"开始处理内容，任务ID: {task_id}，长度: {len(request.content)} 字符")
+        
+        # 注册任务状态
+        active_tasks[task_id] = "running"
         
         # 使用AI编排处理器（默认启用）
         result = await simple_processor.process_content(
@@ -405,7 +419,8 @@ async def process_content(request: ProcessingRequest):
                 "enable_vector_db": request.options.enable_vector_db,
                 "force_structure": request.options.force_structure,
                 "batch_mode": False,
-                "enable_ai_orchestration": True  # 启用AI编排
+                "enable_ai_orchestration": True,  # 启用AI编排
+                "task_id": task_id  # 传递任务ID
             }
         )
         
@@ -421,10 +436,20 @@ async def process_content(request: ProcessingRequest):
             message="处理完成"
         )
         
+    except ProcessingStoppedException:
+        logger.info(f"任务 {task_id} 被用户停止")
+        return ProcessingResponse(
+            success=False,
+            errors=["处理被用户停止"],
+            message="处理已停止"
+        )
     except Exception as e:
         logger.error(f"处理内容失败: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # 清理任务状态
+        active_tasks.pop(task_id, None)
 
 @app.post("/upload", response_model=ProcessingResponse, tags=["Processing"])
 async def upload_file(file: UploadFile = File(...)):
@@ -792,7 +817,7 @@ async def websocket_progress(websocket: WebSocket):
         while True:
             try:
                 message = await websocket.receive_text()
-                # 处理客户端发送的消息（如ping/pong）
+                # 处理客户端发送的消息
                 try:
                     data = json.loads(message)
                     if data.get("type") == "ping":
@@ -800,6 +825,19 @@ async def websocket_progress(websocket: WebSocket):
                             "type": "pong",
                             "timestamp": time.time()
                         }))
+                    elif data.get("type") == "stop_processing":
+                        task_id = data.get("task_id")
+                        if task_id and task_id in active_tasks:
+                            active_tasks[task_id] = "stopped"
+                            logger.info(f"任务 {task_id} 被标记为停止")
+                            await websocket.send_text(json.dumps({
+                                "type": "processing_stopped",
+                                "task_id": task_id,
+                                "message": "处理已停止",
+                                "timestamp": time.time()
+                            }))
+                        else:
+                            logger.warning(f"尝试停止不存在的任务: {task_id}")
                 except json.JSONDecodeError:
                     pass
             except WebSocketDisconnect:

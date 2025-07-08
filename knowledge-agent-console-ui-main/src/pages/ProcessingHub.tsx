@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { StatCard } from '@/components/ui/stat-card';
 
-import { Play, X, Hash, Link, Clock, Star, Save, Copy, Download, ExternalLink, ChevronRight, FileText, MessageSquare } from 'lucide-react';
+import { Play, X, Hash, Link, Clock, Star, Save, Copy, Download, ExternalLink, ChevronRight, FileText, MessageSquare, Square } from 'lucide-react';
 import { apiClient, progressWebSocket, formatError, type ProcessingOptions, type ProcessingResponse } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 interface ProcessingResult {
@@ -41,6 +41,8 @@ const ProcessingHub = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('');
   const [processingSteps, setProcessingSteps] = useState<Array<{step: string, status: 'pending' | 'processing' | 'completed' | 'error', message?: string}>>([]);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [stopping, setStopping] = useState(false);
 
   const [forceUpdate, setForceUpdate] = useState(0);
   const { toast } = useToast();
@@ -100,20 +102,26 @@ const ProcessingHub = () => {
   const handleStartProcessing = async () => {
     if (!content.trim()) return;
     
-    console.log('🚀 ===== 开始处理内容 =====');
-    console.log('📝 输入内容长度:', content.length);
-    console.log('📝 输入模式:', inputMode);
-    console.log('⚙️ 处理选项:', options);
+    // 生成任务ID
+    const taskId = crypto.randomUUID();
+    setCurrentTaskId(taskId);
+    
+    console.log('开始处理内容');
+    console.log('任务ID:', taskId);
+    console.log('输入内容长度:', content.length);
+    console.log('输入模式:', inputMode);
+    console.log('处理选项:', options);
     
     setProcessing(true);
     setProgress(0);
     setError(null);
     setResult(null);
     setCurrentStatus('初始化处理...');
+    setStopping(false);
     
     // 清空步骤，等待后端动态发送
     setProcessingSteps([]);
-    console.log('🔄 清空步骤，等待后端返回步骤');
+    console.log('清空步骤，等待后端返回步骤');
 
     try {
       // 准备请求数据
@@ -139,6 +147,19 @@ const ProcessingHub = () => {
           // 处理pong消息
           if (message.type === 'pong') {
             console.log('收到pong回复，连接正常');
+            return;
+          }
+          
+          // 处理停止确认消息
+          if (message.type === 'processing_stopped') {
+            console.log('收到停止确认消息:', message);
+            setCurrentStatus('处理结束');
+            setProcessing(false);
+            setStopping(false);
+            setCurrentTaskId(null);
+            setResult(null);  // 清空结果
+            setProgress(0);   // 重置进度
+            setError('用户已停止');
             return;
           }
           
@@ -374,6 +395,62 @@ const ProcessingHub = () => {
       });
     } finally {
       setProcessing(false);
+      setStopping(false);
+      setCurrentTaskId(null);
+    }
+  };
+
+  const handleStopProcessing = async () => {
+    if (!currentTaskId) return;
+    
+    console.log('用户请求停止处理，任务ID:', currentTaskId);
+    setStopping(true);
+    setCurrentStatus('正在停止处理...');
+    
+    try {
+      // 发送停止信号
+      if (progressWebSocket.isConnected()) {
+        progressWebSocket.sendStopSignal(currentTaskId);
+      }
+      
+      // 立即更新UI状态
+      setProcessingSteps(prevSteps => {
+        const newSteps = [...prevSteps];
+        const processingIndex = newSteps.findIndex(step => step.status === 'processing');
+        if (processingIndex !== -1) {
+          newSteps[processingIndex] = {
+            ...newSteps[processingIndex],
+            status: 'error',
+            message: '处理已停止'
+          };
+        }
+        return newSteps;
+      });
+      
+      // 重置状态
+      setTimeout(() => {
+        setProcessing(false);
+        setStopping(false);
+        setCurrentStatus('处理已停止');
+        setError('用户主动停止了处理');
+        setCurrentTaskId(null);
+        setResult(null);  // 清空结果
+        setProgress(0);   // 重置进度
+        
+        // 断开WebSocket连接
+        if (progressWebSocket.isConnected()) {
+          progressWebSocket.disconnect();
+        }
+      }, 1000);
+      
+      toast({
+        title: "处理结束",
+        description: "用户已停止处理",
+        variant: "destructive",
+      });
+    } catch (error) {
+      console.error('停止处理失败:', error);
+      setStopping(false);
     }
   };
 
@@ -384,6 +461,8 @@ const ProcessingHub = () => {
     setProgress(0);
     setCurrentStatus('');
     setProcessingSteps([]);
+    setCurrentTaskId(null);
+    setStopping(false);
   };
 
   const handleCopyContent = async () => {
@@ -467,7 +546,8 @@ const ProcessingHub = () => {
                 {processing ? <Spinner className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
                 {processing ? '处理中...' : '开始处理'}
               </Button>
-              <Button variant="outline" onClick={handleClearInput}>
+              
+              <Button variant="outline" onClick={handleClearInput} disabled={processing}>
                 <X className="mr-2 h-4 w-4" />
                 清空
               </Button>
@@ -476,52 +556,81 @@ const ProcessingHub = () => {
         </Card>
 
         {/* 处理进度 */}
-        {processing && <Card className="bg-card/70 backdrop-blur-sm border-border/50 shadow-xl rounded-3xl overflow-hidden processing-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Spinner className="h-5 w-5 animate-spin text-blue-600" />
-                处理进度
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* 总体进度 */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  {/* <span className="font-medium">处理进度</span> */}
-                  <span className="text-blue-600 font-semibold">{Math.round(progress)}%</span>
+        {processing && (
+          <Card className="bg-card/70 backdrop-blur-sm border-border/50 shadow-xl rounded-3xl overflow-hidden">
+            <CardContent className="p-6">
+              {/* 标题行：图标、标题、百分比、停止按钮 */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Spinner className="h-5 w-5 animate-spin text-blue-600" />
+                  <span className="font-semibold text-gray-900">处理进度</span>
+                  <span className="text-blue-600 font-bold text-lg">{Math.round(progress)}%</span>
                 </div>
-                <div className="progress-enhanced h-3 w-full overflow-hidden rounded-full">
-                  <div 
-                    className="progress-bar h-full"
-                    style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
-                  />
-                </div>
+                
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={handleStopProcessing}
+                  disabled={stopping}
+                  className="h-8 px-3"
+                >
+                  <Square className="mr-1 h-3 w-3" />
+                  {stopping ? '停止中' : '停止'}
+                </Button>
               </div>
               
-              {/* 简化的当前状态 */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-gray-700">当前状态</h4>
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200">
-                  <Spinner className="w-5 h-5 text-blue-600" />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-blue-700">
-                      {currentStatus || '正在处理...'}
-                    </div>
-                  </div>
-                </div>
+              {/* 发光流水进度条 */}
+              <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-4 shadow-inner">
+                {/* 基础进度条 */}
+                <div 
+                  className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out"
+                  style={{ 
+                    width: `${Math.max(0, Math.min(100, progress))}%`,
+                    background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)',
+                    boxShadow: '0 0 8px rgba(59, 130, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                  }}
+                />
+                
+                {/* 水波纹激光效果 */}
+                <div 
+                  className="absolute top-0 left-0 h-full rounded-full"
+                  style={{ 
+                    width: `${Math.max(0, Math.min(100, progress))}%`,
+                    background: 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.4), rgba(59, 130, 246, 0.6), transparent)',
+                    backgroundSize: '200% 100%',
+                    animation: 'water-ripple 3s ease-in-out infinite'
+                  }}
+                />
+                
+                {/* 柔和光波 */}
+                <div 
+                  className="absolute top-0 left-0 h-full rounded-full opacity-50"
+                  style={{ 
+                    width: `${Math.max(0, Math.min(100, progress))}%`,
+                    background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent)',
+                    backgroundSize: '40% 100%',
+                    animation: 'soft-wave 4s ease-in-out infinite'
+                  }}
+                />
+              </div>
+              
+              {/* 当前状态 */}
+              <div className="text-sm text-gray-600">
+                {currentStatus || '正在处理...'}
               </div>
             </CardContent>
-          </Card>}
+          </Card>
+        )}
 
-        {/* 错误信息 */}
+        {/* 错误信息
         {error && <Card className="bg-red-50 border-red-200 shadow-xl rounded-3xl overflow-hidden">
             <CardHeader>
-              <CardTitle className="text-red-800">处理错误</CardTitle>
+              <CardTitle className="text-red-800">处理结束</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-red-700">{error}</p>
             </CardContent>
-          </Card>}
+          </Card>} */}
 
         {/* 处理结果 */}
         {result && <Card className="bg-card/70 backdrop-blur-sm border-border/50 shadow-xl rounded-3xl overflow-hidden">

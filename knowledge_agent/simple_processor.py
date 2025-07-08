@@ -14,6 +14,22 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# 停止检查函数
+def check_should_stop(task_id: str):
+    """检查任务是否应该停止"""
+    if not task_id:
+        return
+    
+    try:
+        # 导入api_server的active_tasks
+        from api_server import active_tasks
+        if task_id in active_tasks and active_tasks[task_id] == "stopped":
+            from api_server import ProcessingStoppedException
+            raise ProcessingStoppedException(f"任务 {task_id} 被用户停止")
+    except ImportError:
+        # 如果无法导入，跳过检查
+        pass
+
 class SimpleProgressTracker:
     """简化的进度跟踪器"""
     
@@ -256,8 +272,12 @@ class AIToolOrchestrator:
         """AI编排的智能内容处理"""
         
         tracker = SimpleProgressTracker(self.websocket_broadcast)
+        task_id = options.get("task_id") if options else None
         
         try:
+            # 检查是否应该停止
+            check_should_stop(task_id)
+            
             # 第一步：AI分析内容并制定处理计划
             await tracker.update_progress("planning", "AI分析内容并制定处理方案...", 5, ["策略规划器"])
             
@@ -265,19 +285,31 @@ class AIToolOrchestrator:
             
             await tracker.update_progress("planning", f"处理方案制定完成 - {processing_plan.get('strategy_name', '智能处理')}", 10)
             
+            # 检查是否应该停止
+            check_should_stop(task_id)
+            
             # 第二步：创建AI设计的复合工具（如果需要）
             if processing_plan.get("create_composite_tools"):
                 await tracker.update_progress("tool_creation", "AI创建专用处理工具...", 15, ["工具构建器"])
                 self._create_composite_tools(processing_plan["create_composite_tools"])
                 await tracker.update_progress("tool_creation", f"创建了 {len(processing_plan['create_composite_tools'])} 个专用工具", 20)
             
+            # 检查是否应该停止
+            check_should_stop(task_id)
+            
             # 第三步：执行处理计划
-            results = await self._execute_processing_plan(processing_plan, content, tracker)
+            results = await self._execute_processing_plan(processing_plan, content, tracker, task_id)
+            
+            # 检查是否应该停止
+            check_should_stop(task_id)
             
             # 第四步：Pro模型质量控制
             await tracker.update_progress("quality_control", "Pro模型质量检查中...", 85, ["质量控制器"])
             
             quality_results = await self._run_quality_control(results, processing_plan)
+            
+            # 检查是否应该停止
+            check_should_stop(task_id)
             
             # 第五步：Pro模型最终合成
             await tracker.update_progress("synthesis", "Pro模型最终合成中...", 90, ["结果合成器"])
@@ -1153,7 +1185,7 @@ class AIToolOrchestrator:
     
     # === 执行引擎 ===
     
-    async def _execute_processing_plan(self, plan: Dict[str, Any], content: str, tracker) -> Dict[str, Any]:
+    async def _execute_processing_plan(self, plan: Dict[str, Any], content: str, tracker, task_id: str = None) -> Dict[str, Any]:
         """执行AI制定的处理计划"""
         
         results = {"content": content, "original_content": content}
@@ -1161,6 +1193,9 @@ class AIToolOrchestrator:
         
         try:
             for phase_config in plan.get("execution_phases", []):
+                # 检查是否应该停止
+                check_should_stop(task_id)
+                
                 phase_name = phase_config["phase"]
                 tools = phase_config["tools"]
                 execution_type = phase_config.get("execution_type", "sequential")
@@ -1677,8 +1712,12 @@ class SimpleKnowledgeProcessor:
         
         # 传统处理逻辑（保持不变）
         tracker = SimpleProgressTracker(self.websocket_broadcast)
+        task_id = options.get("task_id") if options else None
         
         try:
+            # 检查是否应该停止
+            check_should_stop(task_id)
+            
             # 阶段1: 开始分析 (0-20%)
             await tracker.update_progress("analyzing", "AI分析内容中...", 10, ["AI分析器"])
             
@@ -1686,17 +1725,26 @@ class SimpleKnowledgeProcessor:
             analysis = await self._ai_analyze_content(content)
             await tracker.update_progress("analyzing", "AI分析完成", 20)
             
+            # 检查是否应该停止
+            check_should_stop(task_id)
+            
             # 阶段2: 概念提取 (20-50%)
             await tracker.update_progress("worker_processing", "AI概念提取中...", 30, ["概念提取器"])
             
             concepts = await self._ai_extract_concepts(content)
             await tracker.update_progress("worker_processing", "概念提取完成", 50)
             
+            # 检查是否应该停止
+            check_should_stop(task_id)
+            
             # 阶段3: 结构化处理 (50-80%)
             await tracker.update_progress("worker_processing", "结构化构建中...", 60, ["结构构建器"])
             
             structured_content = await self._ai_structure_content(content, concepts, analysis)
             await tracker.update_progress("worker_processing", "结构化完成", 80)
+            
+            # 检查是否应该停止
+            check_should_stop(task_id)
             
             # 阶段4: 完成处理 (80-100%)
             await tracker.update_progress("finalizing", "保存处理结果...", 90, ["文件管理器"])
