@@ -490,7 +490,7 @@ class AIToolOrchestrator:
 }}"""
                         }
                     ],
-                    max_tokens=2000,
+                    max_tokens=4000,
                     temperature=0.1
                 )
             )
@@ -1623,10 +1623,27 @@ class AIToolOrchestrator:
 - 扩展知识应该提取文章中涉及但未详细展开的知识点"""
                     }
                 ],
-                max_tokens=2000
+                max_tokens=4000
             )
             
             logger.info(f"Pro模型最终合成完成，长度: {len(response)}")
+            
+            # 验证AI输出是否包含所有必需的部分
+            required_sections = ["## 相关反向链接", "## 相关概念", "## 详细内容", "## 扩展知识"]
+            missing_sections = []
+            for section in required_sections:
+                if section not in response:
+                    missing_sections.append(section)
+            
+            if missing_sections:
+                logger.warning(f"AI输出缺少以下部分: {missing_sections}, 使用fallback方法")
+                return self._create_fallback_structure(content, concepts, analysis)
+            
+            # 验证详细内容部分是否包含原始内容
+            if content.strip() not in response:
+                logger.warning("AI输出没有完整保留原始内容，使用fallback方法")
+                return self._create_fallback_structure(content, concepts, analysis)
+            
             return response
             
         except Exception as e:
@@ -2072,13 +2089,29 @@ class SimpleKnowledgeProcessor:
 - 扩展知识应该提取文章中涉及但未详细展开的知识点"""
                         }
                     ],
-                    max_tokens=1500,
+                    max_tokens=4000,
                     temperature=0.3
                 )
             )
             
             structured = response.choices[0].message.content
             logger.info(f"AI结构化完成，长度: {len(structured)}")
+            
+            # 验证AI输出是否包含所有必需的部分
+            required_sections = ["## 相关反向链接", "## 相关概念", "## 详细内容", "## 扩展知识"]
+            missing_sections = []
+            for section in required_sections:
+                if section not in structured:
+                    missing_sections.append(section)
+            
+            if missing_sections:
+                logger.warning(f"AI结构化输出缺少以下部分: {missing_sections}, 使用fallback方法")
+                return self._create_fallback_structure(content, concepts, analysis)
+            
+            # 验证详细内容部分是否包含原始内容
+            if content.strip() not in structured:
+                logger.warning("AI结构化输出没有完整保留原始内容，使用fallback方法")
+                return self._create_fallback_structure(content, concepts, analysis)
             
             return structured
             
@@ -2087,80 +2120,6 @@ class SimpleKnowledgeProcessor:
             # 使用fallback方法
             return self._create_fallback_structure(content, concepts, analysis)
     
-    def _create_fallback_structure(self, content: str, concepts: List[Dict], analysis: Dict[str, Any]) -> str:
-        """创建fallback结构化内容"""
-        main_topic = analysis.get('main_topic', '知识整理')
-        if main_topic == "未知主题" or main_topic == "分析失败":
-            # 尝试从内容中提取标题
-            lines = content.strip().split('\n')
-            for line in lines[:5]:
-                line = line.strip()
-                if line.startswith('#'):
-                    main_topic = line.lstrip('#').strip()
-                    break
-                elif len(line) > 5 and len(line) < 100:
-                    main_topic = line
-                    break
-            else:
-                main_topic = "知识整理"
-        
-        # 构建五部分结构
-        structured_parts = [f"# {main_topic}"]
-        
-        # 1. 相关反向链接
-        structured_parts.append("\n## 相关反向链接\n")
-        if concepts and len(concepts) > 0:
-            # 基于概念生成简单的反向链接
-            valid_concepts = [c for c in concepts[:5] if c.get('term') and len(c['term'].strip()) > 1]
-            if valid_concepts:
-                for concept in valid_concepts:
-                    term = concept['term'].strip()
-                    concept_type = concept.get('type', 'general')
-                    structured_parts.append(f"- [[{term}]] - {concept_type}相关主题")
-            else:
-                structured_parts.append("- 暂无相关链接")
-        else:
-            structured_parts.append("- 暂无相关链接")
-        
-        # 2. 相关概念
-        structured_parts.append("\n## 相关概念\n")
-        if concepts and len(concepts) > 0:
-            valid_concepts = [c for c in concepts[:8] if c.get('term') and len(c['term'].strip()) > 1]
-            if valid_concepts:
-                for concept in valid_concepts:
-                    term = concept['term'].strip()
-                    definition = concept.get('definition', '').strip()
-                    if definition:
-                        structured_parts.append(f"- **[[{term}]]**: {definition}")
-                    else:
-                        structured_parts.append(f"- **[[{term}]]**")
-            else:
-                structured_parts.append("- 暂无提取到有效概念")
-        else:
-            structured_parts.append("- 暂无提取到有效概念")
-        
-        # 3. 详细内容（完全保留原始输入）
-        structured_parts.append(f"\n## 详细内容\n\n{content}")
-        
-        # 4. 扩展知识
-        structured_parts.append("\n## 扩展知识\n")
-        # 基于内容和概念生成简单的扩展知识
-        if concepts and len(concepts) > 0:
-            concept_types = list(set([c.get('type', 'general') for c in concepts if c.get('type')]))
-            if concept_types:
-                for concept_type in concept_types[:3]:
-                    structured_parts.append(f"- {concept_type}相关的深入学习")
-            else:
-                structured_parts.append("- 相关领域的深入学习")
-        else:
-            structured_parts.append("- 相关领域的深入学习")
-        
-        # 添加处理信息
-        complexity = analysis.get('complexity', 'medium')
-        content_type = analysis.get('content_type', 'general')
-        structured_parts.append(f"\n---\n*本文档复杂度: {complexity} | 内容类型: {content_type} | 处理方式: 基础模板*")
-        
-        return '\n'.join(structured_parts)
 
 
 # === 便捷入口函数 ===
