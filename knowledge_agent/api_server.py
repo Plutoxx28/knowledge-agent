@@ -28,12 +28,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # 导入知识库 Agent 组件
 try:
     from agents.orchestrator import KnowledgeOrchestrator
-    from agents.content_parser import ContentParser
-    from agents.structure_builder import StructureBuilder
-    from agents.link_discoverer import LinkDiscoverer
     from utils.vector_db import LocalVectorDB
-    from utils.link_manager import LinkManager
-    from utils.progress_websocket import ProgressWebSocketServer
+    from link_system import LinkManager
     from utils.file_watcher import create_file_watcher
     from utils.link_renderer import ConceptGraphGenerator
     from config import Settings

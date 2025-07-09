@@ -13,7 +13,7 @@ from pathlib import Path
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.link_manager import LinkManager
+from link_system import LinkManager
 from utils.link_renderer import LinkRenderer, ConceptGraphGenerator
 
 

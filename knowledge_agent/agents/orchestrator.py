@@ -10,7 +10,7 @@ from agents.structure_builder import StructureBuilder
 from agents.link_discoverer import LinkDiscoverer
 from utils.vector_db import LocalVectorDB
 from utils.text_processor import TextProcessor
-from utils.link_manager import LinkManager
+from link_system import LinkManager
 from utils.progress_websocket import create_progress_callback, ProgressBroadcaster
 import logging
 import os

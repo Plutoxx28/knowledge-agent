@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-API服务器启动器 - 解决模块导入问题
+API服务器启动器 - 优化版
 """
 
 import sys
@@ -17,14 +17,14 @@ os.environ['PYTHONPATH'] = str(project_root)
 # 现在导入并运行API服务器
 if __name__ == "__main__":
     try:
-        # 尝试导入完整版API服务器
+        # 导入API服务器
         import api_server
-        print("🚀 启动完整版API服务器...")
+        print("🚀 启动Knowledge Agent API服务器...")
         api_server.main()
     except ImportError as e:
-        print(f"⚠️ 完整版导入失败: {e}")
-        print("🔄 启动简化版API服务器...")
-        
-        # 使用简化版
-        import simple_api_server
-        simple_api_server.main()
+        print(f"❌ API服务器导入失败: {e}")
+        print("请检查依赖是否正确安装")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ 启动失败: {e}")
+        sys.exit(1)
