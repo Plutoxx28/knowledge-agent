@@ -34,6 +34,11 @@ try:
     from utils.link_renderer import ConceptGraphGenerator
     from config import Settings
     from simple_processor import SimpleKnowledgeProcessor
+    from core.strategy_history import StrategyHistoryDB
+    from core.strategy_optimizer import StrategyOptimizer
+    from core.strategy_evaluator import StrategyEvaluator
+    from core.strategy_learner import StrategyLearner
+    from core.history_analyzer import HistoryAnalyzer
     FULL_MODE = True
 except ImportError as e:
     print(f"警告：无法导入完整的Agent组件: {e}")
@@ -68,6 +73,13 @@ vector_db = None
 link_manager = None
 file_watcher = None
 simple_processor = None
+
+# 策略优化相关组件
+strategy_history_db = None
+strategy_optimizer = None
+strategy_evaluator = None
+strategy_learner = None
+history_analyzer = None
 
 # 简化的WebSocket连接管理
 active_websocket_connections = set()
@@ -225,6 +237,7 @@ class SimpleProgressCallback:
 async def startup_event():
     """应用启动时初始化组件"""
     global orchestrator, vector_db, link_manager, file_watcher, simple_processor
+    global strategy_history_db, strategy_optimizer, strategy_evaluator, strategy_learner, history_analyzer
     
     logger.info("正在初始化 Knowledge Agent API 服务器...")
     
@@ -274,6 +287,29 @@ async def startup_event():
         )
         file_watcher.start()
         logger.info("文件监控器启动完成")
+        
+        # 初始化策略优化组件
+        try:
+            strategy_history_db = StrategyHistoryDB()
+            logger.info("策略历史数据库初始化完成")
+            
+            strategy_optimizer = StrategyOptimizer(strategy_history_db)
+            logger.info("策略优化器初始化完成")
+            
+            strategy_evaluator = StrategyEvaluator(strategy_history_db)
+            logger.info("策略评估器初始化完成")
+            
+            history_analyzer = HistoryAnalyzer(strategy_history_db)
+            logger.info("历史分析器初始化完成")
+            
+            strategy_learner = StrategyLearner(strategy_history_db, strategy_optimizer)
+            logger.info("策略学习器初始化完成")
+            
+            logger.info("✅ 策略优化系统初始化成功")
+            
+        except Exception as e:
+            logger.error(f"❌ 策略优化系统初始化失败: {e}")
+            logger.warning("系统将在不使用策略优化功能的情况下运行")
         
         logger.info("Knowledge Agent API 服务器启动成功!")
         
@@ -846,6 +882,204 @@ async def websocket_progress(websocket: WebSocket):
         # 从活跃连接中移除
         active_websocket_connections.discard(websocket)
         logger.info(f"WebSocket连接已移除，当前连接数: {len(active_websocket_connections)}")
+
+
+# ===== 策略优化监控API端点 =====
+
+@app.get("/strategy/performance")
+async def get_strategy_performance(strategy_name: Optional[str] = None, time_window: str = "30d"):
+    """获取策略性能数据"""
+    try:
+        if not strategy_evaluator:
+            raise HTTPException(status_code=503, detail="策略评估器未初始化")
+        
+        if strategy_name:
+            # 获取特定策略的性能
+            evaluation = strategy_evaluator.evaluate_strategy(strategy_name, time_window)
+            return {
+                "strategy_name": strategy_name,
+                "evaluation": evaluation.__dict__ if hasattr(evaluation, '__dict__') else evaluation,
+                "time_window": time_window
+            }
+        else:
+            # 获取所有策略的性能
+            evaluations = strategy_evaluator.evaluate_all_strategies(time_window)
+            return {
+                "all_strategies": {
+                    name: eval.__dict__ if hasattr(eval, '__dict__') else eval 
+                    for name, eval in evaluations.items()
+                },
+                "time_window": time_window,
+                "total_strategies": len(evaluations)
+            }
+    
+    except Exception as e:
+        logger.error(f"获取策略性能失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取策略性能失败: {str(e)}")
+
+
+@app.get("/strategy/history")
+async def get_strategy_history(limit: int = 100, strategy_name: Optional[str] = None):
+    """获取策略执行历史"""
+    try:
+        if not strategy_history_db:
+            raise HTTPException(status_code=503, detail="策略历史数据库未初始化")
+        
+        history = strategy_history_db.get_execution_history(limit, strategy_name)
+        
+        return {
+            "history": history,
+            "total_records": len(history),
+            "strategy_filter": strategy_name,
+            "limit": limit
+        }
+    
+    except Exception as e:
+        logger.error(f"获取策略历史失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取策略历史失败: {str(e)}")
+
+
+@app.get("/strategy/rankings")
+async def get_strategy_rankings(content_type: Optional[str] = None, time_window: str = "7d"):
+    """获取策略排名"""
+    try:
+        if not strategy_history_db:
+            raise HTTPException(status_code=503, detail="策略历史数据库未初始化")
+        
+        rankings = strategy_history_db.get_strategy_rankings(content_type, time_window)
+        
+        return {
+            "rankings": rankings,
+            "content_type_filter": content_type,
+            "time_window": time_window,
+            "total_strategies": len(rankings)
+        }
+    
+    except Exception as e:
+        logger.error(f"获取策略排名失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取策略排名失败: {str(e)}")
+
+
+@app.get("/strategy/analysis/trends")
+async def get_performance_trends(time_window: str = "30d"):
+    """获取性能趋势分析"""
+    try:
+        if not history_analyzer:
+            raise HTTPException(status_code=503, detail="历史分析器未初始化")
+        
+        trends = history_analyzer.analyze_strategy_performance_trends(time_window)
+        
+        return trends
+    
+    except Exception as e:
+        logger.error(f"获取性能趋势失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取性能趋势失败: {str(e)}")
+
+
+@app.get("/strategy/analysis/failures")
+async def get_failure_analysis(time_window: str = "14d"):
+    """获取失败模式分析"""
+    try:
+        if not history_analyzer:
+            raise HTTPException(status_code=503, detail="历史分析器未初始化")
+        
+        failure_analysis = history_analyzer.identify_failure_patterns(time_window)
+        
+        return failure_analysis
+    
+    except Exception as e:
+        logger.error(f"获取失败分析失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败分析失败: {str(e)}")
+
+
+@app.post("/strategy/recommend")
+async def get_strategy_recommendation(content_features: Dict[str, Any]):
+    """获取策略推荐"""
+    try:
+        if not strategy_optimizer:
+            raise HTTPException(status_code=503, detail="策略优化器未初始化")
+        
+        recommendation = strategy_optimizer.select_optimal_strategy(content_features)
+        
+        return {
+            "recommendation": recommendation.__dict__ if hasattr(recommendation, '__dict__') else recommendation,
+            "content_features": content_features
+        }
+    
+    except Exception as e:
+        logger.error(f"获取策略推荐失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取策略推荐失败: {str(e)}")
+
+
+@app.get("/strategy/learning/status")
+async def get_learning_status():
+    """获取学习状态"""
+    try:
+        if not strategy_learner:
+            raise HTTPException(status_code=503, detail="策略学习器未初始化")
+        
+        status = strategy_learner.get_learning_status()
+        
+        return status
+    
+    except Exception as e:
+        logger.error(f"获取学习状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取学习状态失败: {str(e)}")
+
+
+@app.post("/strategy/learning/trigger")
+async def trigger_learning_cycle():
+    """手动触发学习周期"""
+    try:
+        if not strategy_learner:
+            raise HTTPException(status_code=503, detail="策略学习器未初始化")
+        
+        report = await strategy_learner.force_learning_cycle()
+        
+        return {
+            "learning_report": report.__dict__ if hasattr(report, '__dict__') else report,
+            "message": "学习周期执行完成"
+        }
+    
+    except Exception as e:
+        logger.error(f"触发学习周期失败: {e}")
+        raise HTTPException(status_code=500, detail=f"触发学习周期失败: {str(e)}")
+
+
+@app.get("/strategy/database/stats")
+async def get_database_stats():
+    """获取数据库统计信息"""
+    try:
+        if not strategy_history_db:
+            raise HTTPException(status_code=503, detail="策略历史数据库未初始化")
+        
+        stats = strategy_history_db.get_database_stats()
+        
+        return stats
+    
+    except Exception as e:
+        logger.error(f"获取数据库统计失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取数据库统计失败: {str(e)}")
+
+
+@app.get("/strategy/compare")
+async def compare_strategies(strategies: str, time_window: str = "30d", content_type: Optional[str] = None):
+    """比较多个策略的性能"""
+    try:
+        if not strategy_evaluator:
+            raise HTTPException(status_code=503, detail="策略评估器未初始化")
+        
+        # 解析策略名称列表
+        strategy_list = [s.strip() for s in strategies.split(',')]
+        
+        comparison = strategy_evaluator.compare_strategies(strategy_list, time_window, content_type)
+        
+        return comparison
+    
+    except Exception as e:
+        logger.error(f"比较策略失败: {e}")
+        raise HTTPException(status_code=500, detail=f"比较策略失败: {str(e)}")
+
 
 # 主函数
 def main():

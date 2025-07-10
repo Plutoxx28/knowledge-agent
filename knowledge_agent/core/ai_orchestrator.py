@@ -7,10 +7,14 @@ import logging
 import time
 import uuid
 import re
+import hashlib
 from typing import Dict, Any, List, Optional, Callable, Union
 from openai import OpenAI
 from config import settings
 from .progress_tracker import SimpleProgressTracker
+from .strategy_history import StrategyHistoryDB, ExecutionRecord
+from .strategy_optimizer import StrategyOptimizer, OptimizationContext
+from .strategy_definitions import strategy_registry
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +65,30 @@ class AIToolOrchestrator:
         # 复合工具存储
         self.composite_tools = {}
         
-        # 执行历史
+        # 执行历史 (传统内存存储，保持兼容性)
         self.execution_history = []
+        
+        # 策略历史数据库 (新增)
+        try:
+            self.strategy_history = StrategyHistoryDB()
+            logger.info("策略历史数据库初始化成功")
+        except Exception as e:
+            logger.error(f"策略历史数据库初始化失败: {e}")
+            self.strategy_history = None
+        
+        # 策略优化器 (新增)
+        try:
+            self.strategy_optimizer = StrategyOptimizer(
+                history_db=self.strategy_history,
+                strategy_registry=strategy_registry
+            )
+            logger.info("策略优化器初始化成功")
+        except Exception as e:
+            logger.error(f"策略优化器初始化失败: {e}")
+            self.strategy_optimizer = None
+        
+        # 策略优化开关
+        self.enable_strategy_optimization = True
     
     def _initialize_tool_registry(self):
         """初始化完整的工具注册表"""
@@ -239,19 +265,64 @@ class AIToolOrchestrator:
                                                content_type: str = "auto",
                                                metadata: Dict[str, Any] = None,
                                                options: Dict[str, Any] = None) -> Dict[str, Any]:
-        """AI编排的智能内容处理"""
+        """AI编排的智能内容处理 - 集成策略优化"""
         
         tracker = SimpleProgressTracker(self.websocket_broadcast)
         task_id = options.get("task_id") if options else None
+        processing_start_time = time.time()
         
         try:
             # 检查是否应该停止
             check_should_stop(task_id)
             
-            # 第一步：AI分析内容并制定处理计划
-            await tracker.update_progress("planning", "AI分析内容并制定处理方案...", stage_progress=0.3)
+            # 第一步：分析内容特征
+            await tracker.update_progress("analysis", "分析内容特征...", stage_progress=0.2)
+            content_features = self._analyze_content_features(content)
             
-            processing_plan = await self._ai_create_processing_plan(content, content_type)
+            # 第二步：策略优化选择 (新增)
+            selected_strategy = None
+            strategy_recommendation = None
+            if self.enable_strategy_optimization and self.strategy_optimizer:
+                await tracker.update_progress("strategy_selection", "AI智能策略选择...", stage_progress=0.5)
+                
+                try:
+                    # 创建优化上下文
+                    optimization_context = OptimizationContext(
+                        content_features=content_features,
+                        user_preferences=options.get("user_preferences", {}) if options else {},
+                        system_constraints=options.get("system_constraints", {}) if options else {},
+                        historical_context={},
+                        time_constraints=options.get("time_limit") if options else None,
+                        quality_requirements=options.get("min_quality") if options else None
+                    )
+                    
+                    # 智能策略选择
+                    strategy_recommendation = self.strategy_optimizer.select_optimal_strategy(
+                        content_features, optimization_context
+                    )
+                    
+                    selected_strategy = strategy_recommendation.strategy_name
+                    logger.info(f"策略优化器推荐策略: {selected_strategy} (置信度: {strategy_recommendation.confidence_score:.3f})")
+                    
+                    await tracker.update_progress("strategy_selection", 
+                        f"选择策略: {selected_strategy} (置信度: {strategy_recommendation.confidence_score:.2f})", 
+                        stage_progress=1.0)
+                    
+                except Exception as e:
+                    logger.error(f"策略优化选择失败，使用传统方法: {e}")
+                    selected_strategy = None
+            
+            tracker._complete_stage("strategy_selection")
+            
+            # 第三步：制定处理计划
+            await tracker.update_progress("planning", "制定处理计划...", stage_progress=0.3)
+            
+            if selected_strategy:
+                # 使用策略优化器推荐的策略
+                processing_plan = await self._create_strategy_based_plan(content, content_type, selected_strategy, content_features)
+            else:
+                # 传统AI规划方法
+                processing_plan = await self._ai_create_processing_plan(content, content_type)
             
             await tracker.update_progress("planning", f"处理方案制定完成 - {processing_plan.get('strategy_name', '智能处理')}", stage_progress=1.0)
             tracker._complete_stage("planning")
@@ -296,8 +367,18 @@ class AIToolOrchestrator:
             
             await tracker.update_progress("completed", "AI智能处理完成！", progress_percent=100)
             
-            # 记录执行历史
-            self._record_execution_history(content, processing_plan, results, final_content)
+            # 记录执行历史 (包含策略优化信息)
+            processing_time = time.time() - processing_start_time
+            enhanced_plan = processing_plan.copy()
+            enhanced_plan.update({
+                "processing_time": processing_time,
+                "strategy_optimization_used": selected_strategy is not None,
+                "selected_strategy": selected_strategy,
+                "strategy_confidence": strategy_recommendation.confidence_score if strategy_recommendation else None,
+                "content_features": content_features
+            })
+            
+            self._record_execution_history(content, enhanced_plan, results, final_content)
             
             return {
                 "success": True,
@@ -1497,14 +1578,18 @@ class AIToolOrchestrator:
     # === 辅助方法 ===
     
     def _record_execution_history(self, content: str, plan: Dict, results: Dict, final_content: str):
-        """记录执行历史"""
+        """记录执行历史 - 增强版本"""
+        current_time = time.time()
+        success = "error" not in results
+        
+        # 传统内存记录 (保持兼容性)
         history_record = {
-            "timestamp": time.time(),
+            "timestamp": current_time,
             "content_length": len(content),
             "strategy_name": plan.get("strategy_name", "unknown"),
             "tools_used": self._get_tools_used(plan),
-            "success": "error" not in results,
-            "quality_score": 0.8  # 默认质量分数
+            "success": success,
+            "quality_score": results.get("quality_score", 0.8)
         }
         
         self.execution_history.append(history_record)
@@ -1512,6 +1597,47 @@ class AIToolOrchestrator:
         # 保持历史记录数量
         if len(self.execution_history) > 50:
             self.execution_history = self.execution_history[-50:]
+        
+        # 新增：详细的策略历史记录
+        if self.strategy_history:
+            try:
+                # 分析内容特征
+                content_features = self._analyze_content_features(content)
+                
+                # 创建详细的执行记录
+                execution_record = ExecutionRecord(
+                    timestamp=current_time,
+                    session_id=str(uuid.uuid4())[:8],
+                    content_type=content_features.get("content_type", "unknown"),
+                    content_length=len(content),
+                    content_complexity=content_features.get("complexity", "medium"),
+                    content_language=content_features.get("language", "mixed"),
+                    technical_density=content_features.get("technical_density", 0.5),
+                    content_hash=hashlib.md5(content.encode()).hexdigest()[:16],
+                    strategy_name=plan.get("strategy_name", "unknown"),
+                    strategy_version="1.0",
+                    tools_selected=self._get_tools_used(plan),
+                    tool_sequence=self._get_tool_sequence(plan),
+                    success=success,
+                    processing_time=plan.get("processing_time", 0.0),
+                    quality_score=results.get("quality_score", 0.8),
+                    concepts_extracted=len(results.get("concepts", [])),
+                    links_created=len(results.get("links", [])),
+                    ai_calls_count=self._count_ai_calls(plan),
+                    token_usage=plan.get("token_usage", 0),
+                    cost_estimate=plan.get("cost_estimate", 0.0),
+                    fallback_triggered=plan.get("fallback_used", False),
+                    error_type=results.get("error_type") if not success else None,
+                    error_stage=results.get("error_stage") if not success else None,
+                    error_details=results.get("error_details") if not success else None
+                )
+                
+                # 记录到数据库
+                record_id = self.strategy_history.record_execution(execution_record)
+                logger.debug(f"策略执行历史已记录，ID: {record_id}")
+                
+            except Exception as e:
+                logger.error(f"记录策略执行历史失败: {e}")
     
     def _get_tools_used(self, plan: Dict) -> List[str]:
         """获取使用的工具列表"""
@@ -1537,6 +1663,202 @@ class AIToolOrchestrator:
                 if self.tool_registry[tool_name].get("model") == self.pro_model:
                     count += 1
         return count
+    
+    async def _create_strategy_based_plan(self, content: str, content_type: str, 
+                                        strategy_name: str, content_features: Dict[str, Any]) -> Dict[str, Any]:
+        """基于策略优化器推荐的策略创建处理计划"""
+        try:
+            # 获取策略定义
+            strategy_def = strategy_registry.get_strategy(strategy_name)
+            if not strategy_def:
+                logger.warning(f"策略定义不存在: {strategy_name}，使用AI规划")
+                return await self._ai_create_processing_plan(content, content_type)
+            
+            logger.info(f"基于策略 '{strategy_name}' 创建处理计划")
+            
+            # 基于策略定义创建执行计划
+            execution_phases = []
+            tools_to_use = []
+            
+            # 分析阶段
+            analysis_tools = [tool for tool in strategy_def.tools if tool.phase == "analysis"]
+            if analysis_tools:
+                phase_tools = [tool.name for tool in analysis_tools]
+                execution_phases.append({
+                    "phase": "analysis",
+                    "tools": phase_tools,
+                    "description": f"使用 {strategy_def.description} 进行内容分析"
+                })
+                tools_to_use.extend(phase_tools)
+            
+            # 提取阶段
+            extraction_tools = [tool for tool in strategy_def.tools if tool.phase == "extraction"]
+            if extraction_tools:
+                phase_tools = [tool.name for tool in extraction_tools]
+                execution_phases.append({
+                    "phase": "extraction",
+                    "tools": phase_tools,
+                    "description": f"概念和信息提取"
+                })
+                tools_to_use.extend(phase_tools)
+            
+            # 增强阶段
+            enhancement_tools = [tool for tool in strategy_def.tools if tool.phase == "enhancement"]
+            if enhancement_tools:
+                phase_tools = [tool.name for tool in enhancement_tools]
+                execution_phases.append({
+                    "phase": "enhancement",
+                    "tools": phase_tools,
+                    "description": f"内容增强和关系建立"
+                })
+                tools_to_use.extend(phase_tools)
+            
+            # 合成阶段
+            synthesis_tools = [tool for tool in strategy_def.tools if tool.phase == "synthesis"]
+            if synthesis_tools:
+                phase_tools = [tool.name for tool in synthesis_tools]
+                execution_phases.append({
+                    "phase": "synthesis",
+                    "tools": phase_tools,
+                    "description": f"最终结构化和格式化"
+                })
+                tools_to_use.extend(phase_tools)
+            
+            # 如果没有找到合适的工具，添加基础工具
+            if not tools_to_use:
+                logger.warning(f"策略 {strategy_name} 没有可用工具，添加基础工具")
+                execution_phases = [
+                    {
+                        "phase": "analysis",
+                        "tools": ["basic_content_analyzer"],
+                        "description": "基础内容分析"
+                    },
+                    {
+                        "phase": "extraction", 
+                        "tools": ["general_concept_extractor"],
+                        "description": "通用概念提取"
+                    },
+                    {
+                        "phase": "synthesis",
+                        "tools": ["template_structurer"],
+                        "description": "模板结构化"
+                    }
+                ]
+                tools_to_use = ["basic_content_analyzer", "general_concept_extractor", "template_structurer"]
+            
+            # 创建处理计划
+            processing_plan = {
+                "strategy_name": strategy_name,
+                "strategy_description": strategy_def.description,
+                "optimization_method": "strategy_based",
+                "content_analysis": content_features,
+                "execution_phases": execution_phases,
+                "tools_to_use": tools_to_use,
+                "expected_quality_range": strategy_def.expected_quality_range,
+                "expected_time_range": strategy_def.expected_time_range,
+                "fallback_strategy": strategy_def.fallback_strategy,
+                "priority": strategy_def.priority.value,
+                "content_compatibility": {
+                    "applicable_types": [t.value for t in strategy_def.applicable_content_types],
+                    "complexity_range": [c.value for c in strategy_def.complexity_range]
+                }
+            }
+            
+            logger.info(f"策略化计划创建完成，将使用 {len(tools_to_use)} 个工具")
+            return processing_plan
+            
+        except Exception as e:
+            logger.error(f"基于策略创建计划失败: {e}，回退到AI规划")
+            return await self._ai_create_processing_plan(content, content_type)
+    
+    def _analyze_content_features(self, content: str) -> Dict[str, Any]:
+        """分析内容特征用于策略历史记录"""
+        try:
+            # 基础特征
+            content_length = len(content)
+            
+            # 内容类型检测
+            if "用户：" in content and "助手：" in content:
+                content_type = "conversation"
+            elif "# " in content or "## " in content:
+                content_type = "markdown"
+            elif "http" in content.lower():
+                content_type = "url_content"
+            else:
+                content_type = "text"
+            
+            # 复杂度评估
+            if content_length < 500:
+                complexity = "simple"
+            elif content_length < 2000:
+                complexity = "medium"
+            else:
+                complexity = "complex"
+            
+            # 技术密度评估 (简化版本)
+            technical_keywords = ["API", "函数", "代码", "算法", "数据库", "架构", "接口", "模块"]
+            technical_count = sum(1 for keyword in technical_keywords if keyword in content)
+            technical_density = min(technical_count / 10.0, 1.0)
+            
+            # 语言检测
+            chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', content))
+            english_chars = len(re.findall(r'[a-zA-Z]', content))
+            
+            if chinese_chars > english_chars * 2:
+                language = "chinese"
+            elif english_chars > chinese_chars * 2:
+                language = "english"
+            else:
+                language = "mixed"
+            
+            return {
+                "content_type": content_type,
+                "complexity": complexity,
+                "technical_density": technical_density,
+                "language": language,
+                "length_category": self._get_length_category(content_length)
+            }
+            
+        except Exception as e:
+            logger.error(f"分析内容特征失败: {e}")
+            return {
+                "content_type": "unknown",
+                "complexity": "medium",
+                "technical_density": 0.5,
+                "language": "mixed",
+                "length_category": "medium"
+            }
+    
+    def _get_length_category(self, length: int) -> str:
+        """获取内容长度分类"""
+        if length < 300:
+            return "short"
+        elif length < 1500:
+            return "medium"
+        elif length < 5000:
+            return "long"
+        else:
+            return "very_long"
+    
+    def _get_tool_sequence(self, plan: Dict) -> List[str]:
+        """获取工具执行序列"""
+        try:
+            tool_sequence = []
+            for phase in plan.get("execution_phases", []):
+                phase_tools = phase.get("tools", [])
+                tool_sequence.extend(phase_tools)
+            return tool_sequence
+        except:
+            return self._get_tools_used(plan)
+    
+    def _count_ai_calls(self, plan: Dict) -> int:
+        """计算AI调用总次数"""
+        try:
+            flash_calls = self._count_flash_calls(plan)
+            pro_calls = self._count_pro_calls(plan)
+            return flash_calls + pro_calls
+        except:
+            return 0
     
     def _generate_enhanced_statistics(self, results: Dict) -> Dict[str, Any]:
         """生成增强的统计信息"""
