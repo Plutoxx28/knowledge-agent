@@ -111,7 +111,7 @@ class StructureBuilder:
 - [[概念A]]：定义和解释
 - [[概念B]]：定义和解释
 
-## 详细内容
+## 原始内容
 原始输入内容（完全保留，不做任何修改）
 
 ## 扩展知识
@@ -122,7 +122,7 @@ class StructureBuilder:
 - 标题应该简洁明确，体现内容核心主题
 - 反向链接要基于核心概念生成相关主题
 - 概念定义要准确清晰
-- 详细内容部分必须完全保留原始输入
+- 原始内容部分必须完全保留原始输入
 - 扩展知识要有价值且相关"""
                         },
                         {
@@ -142,10 +142,10 @@ class StructureBuilder:
 1. 标题准确反映内容主题
 2. 反向链接基于核心概念生成相关主题
 3. 概念部分使用[[双链]]格式，包含准确定义
-4. 详细内容部分完全保留原始输入
+4. 原始内容部分完全保留原始输入
 5. 扩展知识提供有价值的相关信息
 
-特别注意：详细内容部分必须原样保留，不能有任何修改、删减或重新组织。"""
+特别注意：原始内容部分必须原样保留，不能有任何修改、删减或重新组织。"""
                         }
                     ],
                     max_tokens=4000,
@@ -196,8 +196,8 @@ class StructureBuilder:
         else:
             sections.append("- 暂无提取到有效概念")
         
-        # 3. 详细内容（完全保留原始输入）
-        sections.append(f"\n## 详细内容\n\n{content}")
+        # 3. 原始内容（完全保留原始输入）
+        sections.append(f"\n## 原始内容\n\n{content}")
         
         # 4. 扩展知识
         sections.append("\n## 扩展知识\n")
@@ -267,7 +267,7 @@ class StructureBuilder:
         validation = {'valid': True, 'reason': ''}
         
         # 检查必需的部分
-        required_sections = ["## 相关反向链接", "## 相关概念", "## 详细内容", "## 扩展知识"]
+        required_sections = ["## 相关反向链接", "## 相关概念", "## 原始内容", "## 扩展知识"]
         missing_sections = []
         
         for section in required_sections:

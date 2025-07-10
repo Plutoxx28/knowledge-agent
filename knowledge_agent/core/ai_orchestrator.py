@@ -1118,8 +1118,8 @@ class AIToolOrchestrator:
         else:
             structured_parts.append("- 暂无提取到有效概念")
         
-        # 3. 详细内容（完全保留原始输入）
-        structured_parts.append(f"\n## 详细内容\n\n{content}")
+        # 3. 原始内容（完全保留原始输入）
+        structured_parts.append(f"\n## 原始内容\n\n{content}")
         
         # 4. 扩展知识
         structured_parts.append("\n## 扩展知识\n")
@@ -1486,7 +1486,7 @@ class AIToolOrchestrator:
 - [[概念A]]：定义
 - [[概念B]]：定义
 
-## 详细内容
+## 原始内容
 原始输入内容（完全保留，不做任何修改）
 
 ## 扩展知识
@@ -1520,13 +1520,13 @@ class AIToolOrchestrator:
 
 1. **相关反向链接**：基于提取的概念，生成可能相关的主题和概念链接
 2. **相关概念**：使用[[双链]]格式列出所有重要概念及其定义
-3. **详细内容**：原始输入内容完全保留，不做任何修改或删减
+3. **原始内容**：原始输入内容完全保留，不做任何修改或删减
 4. **扩展知识**：从原始内容中识别出的可以深入学习的知识点和相关领域
 
 注意：
 - 标题应该基于内容分析的主题
 - 反向链接应该基于核心概念生成相关主题
-- 详细内容部分必须完全保留原始输入
+- 原始内容部分必须完全保留原始输入
 - 扩展知识应该提取文章中涉及但未详细展开的知识点"""
                     }
                 ],
@@ -1536,7 +1536,7 @@ class AIToolOrchestrator:
             logger.info(f"Pro模型最终合成完成，长度: {len(response)}")
             
             # 验证AI输出是否包含所有必需的部分
-            required_sections = ["## 相关反向链接", "## 相关概念", "## 详细内容", "## 扩展知识"]
+            required_sections = ["## 相关反向链接", "## 相关概念", "## 原始内容", "## 扩展知识"]
             missing_sections = []
             for section in required_sections:
                 if section not in response:
@@ -1546,7 +1546,7 @@ class AIToolOrchestrator:
                 logger.warning(f"AI输出缺少以下部分: {missing_sections}, 使用fallback方法")
                 return self._create_fallback_structure(content, concepts, analysis)
             
-            # 验证详细内容部分是否包含原始内容
+            # 验证原始内容部分是否包含原始内容
             if content.strip() not in response:
                 logger.warning("AI输出没有完整保留原始内容，使用fallback方法")
                 return self._create_fallback_structure(content, concepts, analysis)

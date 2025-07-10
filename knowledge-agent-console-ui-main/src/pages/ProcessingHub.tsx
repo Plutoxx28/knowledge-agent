@@ -531,7 +531,7 @@ const ProcessingHub = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">处理中心</h1>
-          <p className="text-gray-600 mt-1 my-[15px]">智能处理各种内容，生成结构化知识</p>
+          <p className="text-gray-600 mt-1 my-[15px]">智能处理文本内容，生成结构化知识</p>
         </div>
         <div className="flex items-center gap-4">
         </div>
@@ -553,7 +553,7 @@ const ProcessingHub = () => {
                   <FileText className="h-4 w-4" />
                   文本
                 </TabsTrigger>
-                <TabsTrigger value="conversation" className="flex items-center gap-1">
+                <TabsTrigger value="conversation" disabled className="flex items-center gap-1">
                   <MessageSquare className="h-4 w-4" />
                   对话
                 </TabsTrigger>
@@ -563,9 +563,12 @@ const ProcessingHub = () => {
                 <Textarea placeholder="请输入要处理的文本内容..." className="min-h-[200px] resize-none" value={content} onChange={e => setContent(e.target.value)} />
               </TabsContent>
 
-              <TabsContent value="conversation" className="mt-4">
-                <Textarea placeholder="请粘贴对话记录..." className="min-h-[200px] resize-none" value={content} onChange={e => setContent(e.target.value)} />
-              </TabsContent>
+              {/* 对话模式暂未开放 */}
+              {false && (
+                <TabsContent value="conversation" className="mt-4">
+                  <Textarea placeholder="请粘贴对话记录..." className="min-h-[200px] resize-none" value={content} onChange={e => setContent(e.target.value)} />
+                </TabsContent>
+              )}
             </Tabs>
 
             {/* 操作按钮 */}
