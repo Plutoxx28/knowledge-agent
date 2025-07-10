@@ -22,7 +22,7 @@ class SimpleProgressTracker:
             "extraction": 25,
             "enhancement": 15,
             "quality_control": 10,
-            "synthesis": 10
+            "synthesis": 5
         }
         self.completed_progress = 0
         

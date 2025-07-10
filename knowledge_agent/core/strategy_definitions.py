@@ -86,7 +86,7 @@ class StrategyRegistry:
             tools=[
                 ToolConfig("basic_content_analyzer", "基础内容分析", "flash", "analysis", "low", 2.0, 0.9),
                 ToolConfig("general_concept_extractor", "通用概念提取", "flash", "extraction", "medium", 3.0, 0.85),
-                ToolConfig("simple_structure_builder", "简单结构构建", "flash", "synthesis", "low", 1.5, 0.9)
+                ToolConfig("template_structurer", "模板结构化", "flash", "synthesis", "low", 1.5, 0.9)
             ],
             expected_quality_range=(0.6, 0.8),
             expected_time_range=(5, 15),
@@ -111,11 +111,11 @@ class StrategyRegistry:
             complexity_range=[ProcessingComplexity.COMPLEX, ProcessingComplexity.VERY_COMPLEX],
             priority=StrategyPriority.QUALITY,
             tools=[
-                ToolConfig("advanced_content_analyzer", "高级内容分析", "pro", "analysis", "high", 8.0, 0.95),
-                ToolConfig("specialized_concept_extractor", "专业概念提取", "pro", "extraction", "high", 12.0, 0.9),
-                ToolConfig("relationship_mapper", "关系映射", "pro", "enhancement", "high", 15.0, 0.85),
-                ToolConfig("quality_controller", "质量控制", "pro", "enhancement", "medium", 5.0, 0.9),
-                ToolConfig("comprehensive_synthesizer", "综合合成", "pro", "synthesis", "high", 10.0, 0.9)
+                ToolConfig("content_type_detector", "内容类型检测", "flash", "analysis", "high", 8.0, 0.95),
+                ToolConfig("academic_concept_extractor", "学术概念提取", "flash", "extraction", "high", 12.0, 0.9),
+                ToolConfig("relationship_analyzer", "关系分析", "flash", "enhancement", "high", 15.0, 0.85),
+                ToolConfig("content_quality_validator", "质量验证", "pro", "enhancement", "medium", 5.0, 0.9),
+                ToolConfig("advanced_markdown_structurer", "高级结构化", "pro", "synthesis", "high", 10.0, 0.9)
             ],
             expected_quality_range=(0.8, 0.95),
             expected_time_range=(30, 90),
@@ -138,10 +138,10 @@ class StrategyRegistry:
             complexity_range=[ProcessingComplexity.SIMPLE, ProcessingComplexity.MEDIUM, ProcessingComplexity.COMPLEX],
             priority=StrategyPriority.BALANCED,
             tools=[
-                ToolConfig("conversation_parser", "对话解析器", "flash", "analysis", "medium", 4.0, 0.9),
-                ToolConfig("qa_extractor", "问答提取器", "flash", "extraction", "medium", 5.0, 0.85),
-                ToolConfig("dialogue_analyzer", "对话分析器", "pro", "enhancement", "medium", 8.0, 0.8),
-                ToolConfig("conversation_synthesizer", "对话合成器", "flash", "synthesis", "medium", 3.0, 0.85)
+                ToolConfig("dialogue_parser", "对话解析器", "flash", "analysis", "medium", 4.0, 0.9),
+                ToolConfig("general_concept_extractor", "通用概念提取", "flash", "extraction", "medium", 5.0, 0.85),
+                ToolConfig("summary_generator", "摘要生成器", "flash", "enhancement", "medium", 8.0, 0.8),
+                ToolConfig("specialized_formatter", "专门化格式化", "pro", "synthesis", "medium", 3.0, 0.85)
             ],
             expected_quality_range=(0.7, 0.9),
             expected_time_range=(10, 30),
@@ -164,10 +164,10 @@ class StrategyRegistry:
             complexity_range=[ProcessingComplexity.MEDIUM, ProcessingComplexity.COMPLEX],
             priority=StrategyPriority.QUALITY,
             tools=[
-                ToolConfig("code_analyzer", "代码分析器", "pro", "analysis", "high", 10.0, 0.9),
-                ToolConfig("api_extractor", "API提取器", "pro", "extraction", "high", 8.0, 0.85),
-                ToolConfig("technical_concept_enhancer", "技术概念增强器", "pro", "enhancement", "high", 12.0, 0.8),
-                ToolConfig("code_structure_builder", "代码结构构建器", "flash", "synthesis", "medium", 5.0, 0.85)
+                ToolConfig("complexity_assessor", "复杂度评估器", "flash", "analysis", "high", 10.0, 0.9),
+                ToolConfig("technical_concept_extractor", "技术概念提取器", "flash", "extraction", "high", 8.0, 0.85),
+                ToolConfig("code_block_extractor", "代码块提取器", "flash", "enhancement", "high", 12.0, 0.8),
+                ToolConfig("advanced_markdown_structurer", "高级结构化", "pro", "synthesis", "medium", 5.0, 0.85)
             ],
             expected_quality_range=(0.75, 0.9),
             expected_time_range=(20, 60),
@@ -190,10 +190,10 @@ class StrategyRegistry:
             complexity_range=[ProcessingComplexity.SIMPLE, ProcessingComplexity.MEDIUM, ProcessingComplexity.COMPLEX],
             priority=StrategyPriority.BALANCED,
             tools=[
-                ToolConfig("balanced_analyzer", "平衡分析器", "flash", "analysis", "medium", 5.0, 0.85),
-                ToolConfig("standard_extractor", "标准提取器", "flash", "extraction", "medium", 6.0, 0.8),
-                ToolConfig("link_discoverer", "链接发现器", "flash", "enhancement", "medium", 4.0, 0.8),
-                ToolConfig("standard_synthesizer", "标准合成器", "flash", "synthesis", "medium", 4.0, 0.85)
+                ToolConfig("basic_content_analyzer", "基础内容分析", "flash", "analysis", "medium", 5.0, 0.85),
+                ToolConfig("general_concept_extractor", "通用概念提取", "flash", "extraction", "medium", 6.0, 0.8),
+                ToolConfig("relationship_analyzer", "关系分析器", "flash", "enhancement", "medium", 4.0, 0.8),
+                ToolConfig("advanced_markdown_structurer", "高级结构化", "pro", "synthesis", "medium", 4.0, 0.85)
             ],
             expected_quality_range=(0.65, 0.85),
             expected_time_range=(15, 35),
@@ -216,9 +216,9 @@ class StrategyRegistry:
             complexity_range=[t for t in ProcessingComplexity],
             priority=StrategyPriority.SPEED,
             tools=[
-                ToolConfig("basic_parser", "基础解析器", "any", "analysis", "low", 1.0, 0.95),
-                ToolConfig("simple_extractor", "简单提取器", "any", "extraction", "low", 2.0, 0.9),
-                ToolConfig("minimal_formatter", "最小格式化器", "any", "synthesis", "low", 1.0, 0.95)
+                ToolConfig("basic_content_analyzer", "基础内容分析", "flash", "analysis", "low", 1.0, 0.95),
+                ToolConfig("regex_concept_extractor", "正则概念提取", "flash", "extraction", "low", 2.0, 0.9),
+                ToolConfig("template_structurer", "模板结构化", "flash", "synthesis", "low", 1.0, 0.95)
             ],
             expected_quality_range=(0.4, 0.6),
             expected_time_range=(3, 8),

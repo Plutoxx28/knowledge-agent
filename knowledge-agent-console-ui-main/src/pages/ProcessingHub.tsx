@@ -1,18 +1,14 @@
-import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from 'react';
 
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
-import { StatCard } from '@/components/ui/stat-card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 
-import { Play, X, Hash, Link, Clock, Star, Save, Copy, Download, ExternalLink, ChevronRight, FileText, MessageSquare, Square } from 'lucide-react';
-import { apiClient, progressWebSocket, formatError, type ProcessingOptions, type ProcessingResponse } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { apiClient, formatError, progressWebSocket, type ProcessingOptions, type ProcessingResponse } from '@/lib/api';
+import { Copy, FileText, MessageSquare, Play, Square, X } from 'lucide-react';
 interface ProcessingResult {
   content: string;
   statistics: {
@@ -140,6 +136,12 @@ const ProcessingHub = () => {
 
       // 设置进度监听器
       const progressListener = (message: any) => {
+        // 如果消息是 progress_update 但 task_id 不匹配当前任务，直接忽略
+        if (message.type === 'progress_update' && message.data && currentTaskId) {
+          if (message.data.task_id && message.data.task_id !== currentTaskId) {
+            return; // 不属于当前任务
+          }
+        }
         console.log('=== 接收到WebSocket消息 ===');
         console.log('消息内容:', JSON.stringify(message, null, 2));
         
@@ -326,6 +328,11 @@ const ProcessingHub = () => {
           console.log('✅ 进度WebSocket已连接');
         }
 
+        // 订阅任务
+        console.log('📡 订阅任务:', taskId);
+        await progressWebSocket.subscribeTask(taskId);
+        console.log('✅ 任务订阅成功');
+
         console.log('📡 开始发送处理请求到 POST /process...');
         console.log('📡 API基础URL:', 'http://localhost:8000');
         
@@ -350,11 +357,11 @@ const ProcessingHub = () => {
           
           setResult({
             content: response.result?.structured_content || response.result?.content || '处理完成',
-            statistics: response.statistics || {
-              conceptCount: 0,
-              internalLinks: 0,
-              processingTime: 0,
-              qualityScore: 0
+            statistics: {
+              conceptCount: response.statistics?.conceptCount || response.statistics?.concept_count || 0,
+              internalLinks: response.statistics?.internalLinks || response.statistics?.internal_links || 0,
+              processingTime: response.statistics?.processingTime || response.statistics?.processing_time || 0,
+              qualityScore: response.statistics?.qualityScore || response.statistics?.quality_score || 0
             }
           });
           
@@ -393,6 +400,13 @@ const ProcessingHub = () => {
       } finally {
         // 清理WebSocket监听器
         if (progressWebSocket && progressWebSocket.isConnected()) {
+          // 取消订阅任务
+          const prevTaskId = currentTaskId;
+          if (prevTaskId) {
+            console.log('📡 取消订阅任务:', prevTaskId);
+            await progressWebSocket.unsubscribeTask(prevTaskId);
+            console.log('✅ 任务取消订阅成功');
+          }
           progressWebSocket.removeListener(progressListener);
         }
       }
