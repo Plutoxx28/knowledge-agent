@@ -347,7 +347,7 @@ class AIToolOrchestrator:
             check_should_stop(task_id)
             
             # 第四步：Pro模型质量控制
-            await tracker.update_progress("quality_control", "Pro模型质量检查中...", stage_progress=0.5)
+            await tracker.update_progress("quality_control", "生成质量检查中...", stage_progress=0.5)
             
             quality_results = await self._run_quality_control(results, processing_plan)
             
@@ -358,11 +358,11 @@ class AIToolOrchestrator:
             check_should_stop(task_id)
             
             # 第五步：Pro模型最终合成
-            await tracker.update_progress("synthesis", "Pro模型最终合成中...", stage_progress=0.5)
+            await tracker.update_progress("synthesis", "整理和优化内容中...", stage_progress=0.5)
             
             final_content = await self._final_synthesis(results, quality_results, processing_plan)
             
-            await tracker.update_progress("synthesis", "最终合成完成", stage_progress=1.0)
+            await tracker.update_progress("synthesis", "容整理完成", stage_progress=1.0)
             tracker._complete_stage("synthesis")
             
             await tracker.update_progress("completed", "AI智能处理完成！", progress_percent=100)

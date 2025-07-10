@@ -240,35 +240,8 @@ def broadcast_progress_sync(progress_data: Dict[str, Any]):
             # 没有事件循环，创建新的
             asyncio.run(server.broadcast_progress(progress_data))
 
-class ProgressBroadcaster:
-    """进度广播器 - 与KnowledgeOrchestrator集成"""
-    
-    def __init__(self, websocket_server: Optional[ProgressWebSocketServer] = None):
-        self.ws_server = websocket_server or get_global_websocket_server()
-    
-    def __call__(self, progress):
-        """进度回调函数"""
-        try:
-            progress_data = progress.to_dict()
-            
-            # 记录进度数据用于调试
-            logger.info(f"[{progress.task_id[:8]}] 发送进度更新: {progress.current_step} "
-                      f"({progress.completed_steps}/{progress.total_steps}) - 客户端数量: {len(self.ws_server.clients)}")
-            
-            # 同步广播进度
-            broadcast_progress_sync(progress_data)
-            
-            # 记录关键进度点
-            if progress.stage.value in ["analyzing", "generating_workers", "completed"]:
-                logger.info(f"[{progress.task_id[:8]}] {progress.current_step} "
-                          f"({progress.completed_steps}/{progress.total_steps})")
-            
-        except Exception as e:
-            logger.error(f"广播进度失败: {e}")
-
-def create_progress_callback() -> ProgressBroadcaster:
-    """创建进度回调函数"""
-    return ProgressBroadcaster()
+# ProgressBroadcaster 类已迁移到新架构 (core/progress_tracker.py)
+# 此文件保留 ProgressWebSocketServer 用于 WebSocket 连接管理
 
 if __name__ == "__main__":
     # 启动服务器

@@ -7,7 +7,7 @@ import re
 import os
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
-from .link_manager import LinkManager
+from link_system import LinkManager
 
 
 class LinkRenderer:

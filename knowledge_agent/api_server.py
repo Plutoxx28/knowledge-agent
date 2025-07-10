@@ -27,7 +27,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # 导入知识库 Agent 组件
 try:
-    from agents.orchestrator import KnowledgeOrchestrator
+    # from agents.orchestrator import KnowledgeOrchestrator  # 已迁移到新架构
     from utils.vector_db import LocalVectorDB
     from link_system import LinkManager
     from utils.file_watcher import create_file_watcher
@@ -68,7 +68,7 @@ app.add_middleware(
 )
 
 # 全局变量
-orchestrator = None
+# orchestrator = None  # 已迁移到新架构
 vector_db = None
 link_manager = None
 file_watcher = None
@@ -193,50 +193,13 @@ async def broadcast_progress(progress_data: Dict[str, Any]):
     logger.info(f"📊 WebSocket广播完成，剩余连接: {len(active_websocket_connections)}")
 
 # 简化的进度回调类
-class SimpleProgressCallback:
-    """简化的进度回调"""
-    
-    def __call__(self, progress):
-        """进度回调函数"""
-        try:
-            logger.info(f"🎯 SimpleProgressCallback被调用！")
-            progress_data = progress.to_dict()
-            
-            # 记录进度数据用于调试
-            logger.info(f"📊 [{progress.task_id[:8]}] 发送进度更新: {progress.current_step} "
-                      f"({progress.completed_steps}/{progress.total_steps}) - 客户端数量: {len(active_websocket_connections)}")
-            logger.info(f"📊 进度数据: {progress_data}")
-            
-            # 同步广播进度 - 使用asyncio.create_task在事件循环中运行
-            try:
-                loop = asyncio.get_event_loop()
-                logger.info(f"🔄 获取事件循环成功，正在运行: {loop.is_running()}")
-                if loop.is_running():
-                    task = asyncio.create_task(broadcast_progress(progress_data))
-                    logger.info(f"📤 创建广播任务: {task}")
-                else:
-                    logger.info(f"📤 事件循环未运行，直接运行广播")
-                    loop.run_until_complete(broadcast_progress(progress_data))
-            except RuntimeError as e:
-                logger.warning(f"⚠️ 事件循环异常: {e}，尝试创建新的")
-                # 如果没有事件循环，尝试创建新的
-                asyncio.run(broadcast_progress(progress_data))
-            
-            # 记录关键进度点
-            if progress.stage.value in ["analyzing", "generating_workers", "completed"]:
-                logger.info(f"🎯 [{progress.task_id[:8]}] {progress.current_step} "
-                          f"({progress.completed_steps}/{progress.total_steps})")
-            
-        except Exception as e:
-            logger.error(f"❌ 广播进度失败: {e}")
-            import traceback
-            logger.error(f"❌ 错误堆栈: {traceback.format_exc()}")
+# SimpleProgressCallback 已迁移到新架构 (core/progress_tracker.py)，不再需要
 
 # 启动时初始化
 @app.on_event("startup")
 async def startup_event():
     """应用启动时初始化组件"""
-    global orchestrator, vector_db, link_manager, file_watcher, simple_processor
+    global vector_db, link_manager, file_watcher, simple_processor
     global strategy_history_db, strategy_optimizer, strategy_evaluator, strategy_learner, history_analyzer
     
     logger.info("正在初始化 Knowledge Agent API 服务器...")
@@ -263,14 +226,10 @@ async def startup_event():
         )
         logger.info("链接管理器初始化完成")
         
-        # 初始化知识编排器 - 作为备用
-        progress_callback = SimpleProgressCallback()
-        
-        orchestrator = KnowledgeOrchestrator(
-            knowledge_base_path=settings.knowledge_base_path,
-            progress_callback=progress_callback
-        )
-        logger.info("知识编排器初始化完成")
+        # 初始化知识编排器 - 已迁移到新架构 (core/ai_orchestrator.py)
+        # progress_callback = SimpleProgressCallback()
+        # orchestrator = KnowledgeOrchestrator(...)
+        logger.info("知识编排器已迁移到新架构")
         
         # 初始化文件监控器
         def file_change_callback(change_info):
@@ -360,7 +319,6 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "services": {
             "simple_processor": simple_processor is not None,
-            "orchestrator": orchestrator is not None,
             "vector_db": vector_db is not None,
             "link_manager": link_manager is not None,
             "file_watcher": file_watcher is not None and file_watcher.is_running if file_watcher else False
@@ -487,8 +445,8 @@ async def process_content(request: ProcessingRequest):
 async def upload_file(file: UploadFile = File(...)):
     """上传文件处理"""
     try:
-        if not orchestrator:
-            raise HTTPException(status_code=500, detail="编排器未初始化")
+        if not simple_processor:
+            raise HTTPException(status_code=500, detail="简化处理器未初始化")
         
         # 读取文件内容
         content = await file.read()
@@ -510,25 +468,24 @@ async def upload_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="文件编码不支持，请使用 UTF-8 编码")
         
         # 构建处理参数
-        input_data = {
-            "content": text_content,
-            "type": "text",
-            "metadata": {
-                "source": file.filename,
-                "upload_time": datetime.now().isoformat()
-            },
-            "operation": "create",
-            "options": {
-                "enable_linking": True,
-                "enable_vector_db": True,
-                "force_structure": False,
-                "batch_mode": False
-            }
+        metadata = {
+            "source": file.filename,
+            "upload_time": datetime.now().isoformat()
         }
         
-        # 执行处理
-        result = await asyncio.get_event_loop().run_in_executor(
-            None, orchestrator.process, input_data
+        options = {
+            "enable_linking": True,
+            "enable_vector_db": True,
+            "force_structure": False,
+            "batch_mode": False
+        }
+        
+        # 执行处理 - 使用新的处理器
+        result = await simple_processor.process_content(
+            content=text_content,
+            content_type="text",
+            metadata=metadata,
+            options=options
         )
         
         return ProcessingResponse(

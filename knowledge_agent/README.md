@@ -280,27 +280,23 @@ if result["success"]:
     print(f"发现概念: {len(result['result']['concepts'])}个")
 ```
 
-#### 原有接口（向后兼容）
+#### 原有接口（已迁移）
 
 ```python
-from agents.orchestrator import KnowledgeOrchestrator
+# 注意：旧的多Agent架构已迁移到新的AI策略优化系统
+# 请使用上述的新接口进行处理
 
-# 创建编排器（保留用于向后兼容）
-orchestrator = KnowledgeOrchestrator("/path/to/your/knowledge_base")
+# 旧代码：
+# from agents.orchestrator import KnowledgeOrchestrator
+# orchestrator = KnowledgeOrchestrator("/path/to/your/knowledge_base")
 
-# 处理对话记录
-input_data = {
-    "content": "用户：什么是RAG？\n助手：RAG是检索增强生成...",
-    "type": "conversation",
-    "operation": "create",
-    "metadata": {"source": "AI对话", "topic": "RAG技术"}
-}
-
-result = orchestrator.process(input_data)
-
-if result["success"]:
-    print(f"生成文件: {result['output_file']}")
-    print(f"发现概念: {len(result['result']['concepts'])}个")
+# 新代码：
+from simple_processor import process_content_smart
+result = await process_content_smart(
+    content="用户：什么是RAG？\n助手：RAG是检索增强生成...",
+    content_type="conversation",
+    metadata={"source": "AI对话", "topic": "RAG技术"}
+)
 ```
 
 #### 链接系统使用
@@ -324,10 +320,16 @@ report = link_manager.generate_comprehensive_report()
 print(f"链接质量分数: {report['link_quality']['quality_score']}")
 ```
 
-### 4. 运行测试
+### 4. 系统测试
 
 ```bash
-python test_system.py
+# 测试API服务器
+curl http://localhost:8000/health
+
+# 测试处理功能
+curl -X POST http://localhost:8000/process \
+  -H "Content-Type: application/json" \
+  -d '{"content": "测试内容", "type": "text"}'
 ```
 
 ## 支持的操作
@@ -482,18 +484,25 @@ stats = vector_db.get_collection_stats()
 
 ## 测试
 
-运行完整测试套件：
+系统功能验证：
 
 ```bash
-python test_system.py
+# 启动API服务器
+python3 run_api.py
+
+# 健康检查
+curl http://localhost:8000/health
+
+# 策略优化状态检查
+curl http://localhost:8000/strategy/performance
 ```
 
-测试包括：
-- 对话记录处理
-- 普通文本处理  
-- 内容分析模式
-- 向量数据库操作
-- URL处理（需要网络）
+主要功能：
+- AI策略优化处理
+- 智能内容分析
+- 概念提取和链接发现
+- 向量数据库语义搜索
+- 实时进度跟踪
 
 ## 项目结构
 
@@ -519,23 +528,17 @@ knowledge_agent/
 │   ├── path_utils.py          # 路径处理工具
 │   ├── analysis_service.py    # 分析服务
 │   └── link_manager.py        # 主要管理接口
-├── agents/                    # 原有Agent架构（向后兼容）
-│   ├── base_agent.py          # 基础Agent类
-│   ├── content_parser.py      # 内容解析工作者
-│   ├── structure_builder.py   # 结构构建工作者
-│   ├── link_discoverer.py     # 链接发现工作者
-│   └── orchestrator.py        # 主编排Agent（向后兼容）
 ├── utils/                     # 工具模块
 │   ├── text_processor.py      # 长文本处理模块
 │   ├── vector_db.py           # 向量数据库模块
-│   ├── link_manager.py        # 链接管理器（已迁移到link_system）
-│   └── file_watcher.py        # 文件监控
-├── simple_processor.py        # 便捷处理入口（重构后）
+│   ├── progress_websocket.py  # WebSocket进度服务
+│   ├── file_watcher.py        # 文件监控
+│   └── link_renderer.py       # 链接渲染工具
+├── simple_processor.py        # 便捷处理入口
 ├── api_server.py              # API服务器
 ├── run_api.py                 # API启动脚本
 ├── config.py                  # 配置管理
 ├── requirements.txt           # 依赖包
-├── test_system.py            # 测试脚本
 └── README.md                 # 说明文档
 ```
 
