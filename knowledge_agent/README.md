@@ -58,7 +58,7 @@
 - **🤖 智能决策引擎**: 6种专门化处理策略自动匹配最优方案
 - **📊 性能监控**: 实时策略性能分析、趋势识别、失败模式检测
 - **🔄 自适应学习**: 系统自动从执行历史中学习并优化策略权重
-- **Agent工具调用**: 基于AI编排的智能工具调用架构，30+专用工具函数
+- **Agent工具调用**: 基于AI编排的智能工具调用架构，22个专用工具函数
 - **智能工具选择**: AI自动选择和组合最适合的工具链进行处理
 - **动态工具组合**: 根据内容类型和复杂度动态调整工具使用策略
 - **智能解析**: 支持Markdown、纯文本解析
@@ -73,7 +73,7 @@
 ```
 Knowledge Agent System (单Agent架构)
 ├── AI Tool Orchestrator (AI工具编排器)
-│   ├── 30+ 专用工具函数
+│   ├── 22个专用工具函数
 │   ├── 智能工具选择与组合
 │   └── 动态工具调用链
 ├── Core Modules (核心模块)
@@ -99,7 +99,7 @@ Knowledge Agent System (单Agent架构)
 
 ### 工具类型
 
-系统包含30+专用工具函数，分为以下类型：
+系统包含22个专用工具函数，分为以下类型：
 
 - **内容分析工具**: 文本类型识别、结构分析、复杂度评估
 - **概念提取工具**: 关键词提取、实体识别、概念关系发现
@@ -120,11 +120,11 @@ tools_to_use = await orchestrator.select_tools_for_content(
 
 # 示例输出：
 # [
-#     "analyze_conversation_structure",
-#     "extract_key_concepts", 
-#     "identify_qa_pairs",
-#     "create_concept_links",
-#     "generate_summary"
+#     "dialogue_parser",
+#     "general_concept_extractor", 
+#     "relationship_analyzer",
+#     "summary_generator",
+#     "advanced_markdown_structurer"
 # ]
 ```
 
@@ -220,7 +220,7 @@ from tools.structure_builder import StructureBuilder
 # 使用AI工具编排器（智能工具调用）
 orchestrator = AIToolOrchestrator()
 
-# AI编排处理 - 自动选择和组合30+工具
+# AI编排处理 - 自动选择和组合22个工具
 result = await orchestrator.process_content_with_orchestration(
     content="用户：什么是RAG？\n助手：RAG是检索增强生成...",
     content_type="conversation",
@@ -569,7 +569,7 @@ knowledge_agent/
 ### 🚀 重构成果
 - **架构升级**: 从多Agent架构升级为单Agent工具调用架构
 - **代码质量**: 从单体架构重构为模块化架构
-- **智能化提升**: AI自动选择和组合30+专用工具函数
+- **智能化提升**: AI自动选择和组合22个专用工具函数
 - **可维护性**: 大幅提升代码可读性和维护性
 - **可扩展性**: 新功能可轻松添加到对应模块
 - **性能优化**: 智能降级机制确保系统稳定性
