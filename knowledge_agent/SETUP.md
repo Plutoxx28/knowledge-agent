@@ -49,6 +49,7 @@ pip install -r requirements.txt
 
 2. 启动后端API服务器：
 ```bash
+cd ../knowledge_agent
 python3 run_api.py
 ```
 
