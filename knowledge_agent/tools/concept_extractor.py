@@ -104,7 +104,7 @@ class ConceptExtractor:
 请确保提取的概念具有代表性且与内容高度相关。"""
                         }
                     ],
-                    max_tokens=1000,
+                    max_tokens=65535,
                     temperature=0.2
                 )
             )

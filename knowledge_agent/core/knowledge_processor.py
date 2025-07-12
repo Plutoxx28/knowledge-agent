@@ -192,7 +192,7 @@ class SimpleKnowledgeProcessor:
 }}"""
                         }
                     ],
-                    max_tokens=1000,
+                    max_tokens=65535,
                     temperature=0
                 )
             )
@@ -253,7 +253,7 @@ class SimpleKnowledgeProcessor:
 """
                         }
                     ],
-                    max_tokens=800,
+                    max_tokens=65535,
                     temperature=0
                 )
             )
@@ -381,7 +381,7 @@ class SimpleKnowledgeProcessor:
 - 扩展知识应该提取文章中涉及但未详细展开的知识点"""
                         }
                     ],
-                    max_tokens=4000,
+                    max_tokens=65535,
                     temperature=0.3
                 )
             )
@@ -474,16 +474,9 @@ class SimpleKnowledgeProcessor:
         
         # 4. 扩展知识
         structured_parts.append("\n## 扩展知识\n")
-        # 基于内容和概念生成简单的扩展知识
-        if concepts and len(concepts) > 0:
-            concept_types = list(set([c.get('type', 'general') for c in concepts if c.get('type')]))
-            if concept_types:
-                for concept_type in concept_types[:3]:
-                    structured_parts.append(f"- {concept_type}相关的深入学习")
-            else:
-                structured_parts.append("- 相关领域的深入学习")
-        else:
-            structured_parts.append("- 相关领域的深入学习")
+        # 基于内容和概念生成具体的扩展概念
+        extensions = self._generate_fallback_extensions(content, concepts, analysis)
+        structured_parts.extend(extensions)
         
         # 添加处理信息
         complexity = analysis.get('complexity', 'medium')
@@ -491,3 +484,80 @@ class SimpleKnowledgeProcessor:
         structured_parts.append(f"\n---\n*本文档复杂度: {complexity} | 内容类型: {content_type} | 处理方式: 基础模板*")
         
         return '\n'.join(structured_parts)
+    
+    def _generate_fallback_extensions(self, content: str, concepts: List[Dict], analysis: Dict[str, Any]) -> List[str]:
+        """生成fallback扩展知识概念列表"""
+        extensions = []
+        existing_terms = set([c.get('term', '').lower() for c in concepts])
+        
+        # 1. 从概念中直接提取扩展概念
+        for concept in concepts[:3]:
+            term = concept.get('term', '').strip()
+            if term and len(term) > 1:
+                concept_type = concept.get('type', 'general')
+                # 基于概念类型生成相关概念
+                if concept_type == 'technical_term':
+                    related_terms = [f"{term}协议", f"{term}架构", f"{term}实现"]
+                elif concept_type == 'methodology':
+                    related_terms = [f"{term}模式", f"{term}流程", f"{term}标准"]
+                else:
+                    related_terms = [f"{term}原理", f"{term}应用", f"{term}发展"]
+                
+                for related in related_terms[:1]:  # 每个概念只取1个相关概念
+                    if related.lower() not in existing_terms:
+                        extensions.append(f"- {related}")
+                        existing_terms.add(related.lower())
+                        break
+        
+        # 2. 基于内容关键词生成技术概念
+        import re
+        content_lower = content.lower()
+        
+        # 技术领域概念映射
+        tech_concepts = {
+            'api': ['RESTful API', 'GraphQL', 'API网关'],
+            'protocol': ['HTTP协议', 'WebSocket', 'TCP/IP'],
+            'mcp': ['JSON-RPC', 'OpenAI协议', '插件系统'],
+            'agent': ['智能代理', '多代理系统', '自主决策'],
+            'database': ['数据库索引', '查询优化', '事务处理'],
+            'ai': ['机器学习', '深度学习', '神经网络'],
+            'web': ['前端框架', '后端架构', '全栈开发'],
+            'system': ['系统架构', '微服务', '分布式系统']
+        }
+        
+        for keyword, related_concepts in tech_concepts.items():
+            if keyword in content_lower:
+                for concept in related_concepts[:2]:
+                    if (concept.lower() not in existing_terms and 
+                        len(extensions) < 5):
+                        extensions.append(f"- {concept}")
+                        existing_terms.add(concept.lower())
+                break  # 只匹配第一个关键词
+        
+        # 3. 基于内容类型生成通用概念
+        content_type = analysis.get('content_type', 'general')
+        if len(extensions) < 3:
+            type_concepts = {
+                'technical': ['软件工程', '代码规范', '测试方法'],
+                'educational': ['学习方法', '知识体系', '实践项目'],
+                'academic': ['研究方法', '学术论文', '理论框架'],
+                'general': ['行业标准', '最佳实践', '发展趋势']
+            }
+            
+            default_concepts = type_concepts.get(content_type, type_concepts['general'])
+            for concept in default_concepts:
+                if (concept.lower() not in existing_terms and 
+                    len(extensions) < 5):
+                    extensions.append(f"- {concept}")
+                    existing_terms.add(concept.lower())
+        
+        # 4. 确保至少有3个扩展概念
+        if len(extensions) < 3:
+            fallback_concepts = ["技术架构", "实现方案", "应用场景", "发展方向", "相关标准"]
+            for concept in fallback_concepts:
+                if (concept.lower() not in existing_terms and 
+                    len(extensions) < 3):
+                    extensions.append(f"- {concept}")
+                    existing_terms.add(concept.lower())
+        
+        return extensions[:5]  # 最多5个扩展概念

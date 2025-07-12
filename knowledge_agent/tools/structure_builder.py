@@ -94,10 +94,10 @@ class StructureBuilder:
 
 要求：
 1. 生成清晰的知识笔记结构
-2. 为重要概念添加双链格式：[[概念名]]
+2. 概念使用普通文本格式，不要使用[[]]双链
 3. 完整保留原始内容
 4. 生成相关反向链接
-5. 提取扩展知识点
+5. 提取详细具体的扩展知识点
 6. 保持逻辑清晰和内容完整
 
 标准输出格式：
@@ -108,22 +108,23 @@ class StructureBuilder:
 - [[相关概念2]] - 关联说明
 
 ## 相关概念
-- [[概念A]]：定义和解释
-- [[概念B]]：定义和解释
+- **概念A**：定义和解释
+- **概念B**：定义和解释
 
 ## 原始内容
 原始输入内容（完全保留，不做任何修改）
 
 ## 扩展知识
-- 扩展知识点1：详细描述
-- 扩展知识点2：详细描述
+- 相关技术概念1
+- 相关技术概念2
+- 相关技术概念3
 
 注意事项：
 - 标题应该简洁明确，体现内容核心主题
 - 反向链接要基于核心概念生成相关主题
-- 概念定义要准确清晰
+- 概念定义要准确清晰，使用加粗格式突出概念名称
 - 原始内容部分必须完全保留原始输入
-- 扩展知识要有价值且相关"""
+- 扩展知识直接列出具体的技术概念、术语或相关主题，不要包含描述性文字"""
                         },
                         {
                             "role": "user",
@@ -141,14 +142,16 @@ class StructureBuilder:
 请严格按照标准格式生成高质量的结构化文档，确保：
 1. 标题准确反映内容主题
 2. 反向链接基于核心概念生成相关主题
-3. 概念部分使用[[双链]]格式，包含准确定义
+3. 概念部分使用**加粗**格式突出概念名称，不要使用[[]]双链
 4. 原始内容部分完全保留原始输入
-5. 扩展知识提供有价值的相关信息
+5. 扩展知识直接列出具体的概念名称，如技术术语、相关概念等
 
-特别注意：原始内容部分必须原样保留，不能有任何修改、删减或重新组织。"""
+特别注意：
+- 原始内容部分必须原样保留，不能有任何修改、删减或重新组织
+- 扩展知识只列出概念名称，不要包含"的应用"、"相关学习"等描述性文字"""
                         }
                     ],
-                    max_tokens=4000,
+                    max_tokens=65535,
                     temperature=0.3
                 )
             )
@@ -371,65 +374,126 @@ class StructureBuilder:
             
             if term and len(term) > 1:
                 if definition and len(definition) > 3:
-                    concept_lines.append(f"- **[[{term}]]**: {definition}")
+                    concept_lines.append(f"- **{term}**: {definition}")
                 else:
-                    concept_lines.append(f"- **[[{term}]]**")
+                    concept_lines.append(f"- **{term}**")
         
         return concept_lines
     
     def _generate_extensions(self, concepts: List[Dict], analysis: Dict[str, Any], 
                            content: str) -> List[str]:
-        """生成扩展知识"""
+        """基于原文内容生成扩展知识概念列表"""
         extensions = []
+        existing_terms = set([c.get('term', '').lower() for c in concepts])
         
-        # 基于概念类型生成扩展
-        concept_types = list(set([c.get('type', 'general') for c in concepts if c.get('type')]))
-        for concept_type in concept_types[:3]:
-            type_extensions = {
-                'technical_term': '技术实现和最佳实践',
-                'methodology': '相关方法论和应用场景',
-                'framework': '框架生态和扩展工具',
-                'principle': '理论基础和实际应用',
-                'concept': '概念深化和相关理论'
-            }
-            
-            extension = type_extensions.get(concept_type, f'{concept_type}相关的深入学习')
-            extensions.append(f"- {extension}")
+        # 1. 从原文直接提取技术术语和专业词汇
+        import re
         
-        # 基于内容类型生成扩展
+        # 提取英文技术术语
+        tech_patterns = [
+            r'\b([A-Z]{2,})\b',  # 缩写词：API, HTTP, JSON
+            r'\b([A-Z][a-z]+(?:[A-Z][a-z]*)+)\b',  # 驼峰命名：WebSocket, JavaScript
+            r'\b([a-z]+(?:-[a-z]+)+)\b',  # 连字符术语：client-server
+        ]
+        
+        tech_terms = []
+        for pattern in tech_patterns:
+            matches = re.findall(pattern, content)
+            tech_terms.extend(matches)
+        
+        # 提取中文专业术语（3-6字）
+        chinese_terms = re.findall(r'[一-龟]{3,6}', content)
+        
+        # 过滤并添加新发现的术语
+        all_terms = tech_terms + chinese_terms
+        for term in all_terms:
+            if (term.lower() not in existing_terms and 
+                len(term) > 2 and len(term) < 20 and
+                not term.isdigit() and
+                term not in ['内容', '处理', '分析', '系统', '方法', '工具']):
+                extensions.append(f"- {term}")
+                existing_terms.add(term.lower())
+                if len(extensions) >= 3:
+                    break
+        
+        # 2. 基于内容主题和关键词生成相关概念
+        content_lower = content.lower()
+        main_topic = analysis.get('main_topic', '')
+        
+        # 技术领域相关概念
+        if any(keyword in content_lower for keyword in ['api', 'protocol', 'mcp', 'rpc']):
+            related_concepts = ['JSON-RPC', 'gRPC', 'REST API', 'GraphQL', 'Protocol Buffer']
+            extensions.extend([f"- {concept}" for concept in related_concepts[:2] 
+                             if concept.lower() not in existing_terms])
+        
+        elif any(keyword in content_lower for keyword in ['数据库', 'database', 'sql']):
+            related_concepts = ['索引优化', '查询计划', '事务管理', 'ORM框架', '数据迁移']
+            extensions.extend([f"- {concept}" for concept in related_concepts[:2]
+                             if concept.lower() not in existing_terms])
+        
+        elif any(keyword in content_lower for keyword in ['agent', '代理', '智能', 'ai']):
+            related_concepts = ['机器学习', '自然语言处理', '知识图谱', '推理引擎', '决策树']
+            extensions.extend([f"- {concept}" for concept in related_concepts[:2]
+                             if concept.lower() not in existing_terms])
+        
+        elif any(keyword in content_lower for keyword in ['web', 'http', '网络', 'socket']):
+            related_concepts = ['负载均衡', '反向代理', 'CDN', 'WebSocket', '消息队列']
+            extensions.extend([f"- {concept}" for concept in related_concepts[:2]
+                             if concept.lower() not in existing_terms])
+        
+        # 3. 基于内容类型添加领域概念
         content_type = analysis.get('content_type', 'general')
-        type_extensions = {
-            'technical': '技术文档和API参考',
-            'educational': '练习题和进阶课程',
-            'academic': '相关论文和研究方向',
-            'conversational': '讨论话题和问答集合',
-            'documentation': '配置指南和故障排除'
-        }
-        
-        if content_type in type_extensions:
-            extensions.append(f"- {type_extensions[content_type]}")
-        
-        # 基于领域生成扩展
         domain = analysis.get('domain', '')
-        if domain and domain != '通用':
-            extensions.append(f"- {domain}领域的前沿发展")
         
-        # 基于内容复杂度生成扩展
-        complexity = analysis.get('complexity', 'medium')
-        if complexity == 'simple':
-            extensions.append("- 进阶内容和深入理解")
-        elif complexity == 'complex':
-            extensions.append("- 基础概念回顾和入门资料")
+        if content_type == 'technical':
+            if '框架' in content or 'framework' in content_lower:
+                tech_concepts = ['微服务架构', '容器化', '持续集成', '服务网格']
+            elif '算法' in content or 'algorithm' in content_lower:
+                tech_concepts = ['时间复杂度', '空间复杂度', '动态规划', '贪心算法']
+            else:
+                tech_concepts = ['设计模式', '代码重构', '单元测试', '性能优化']
+            
+            extensions.extend([f"- {concept}" for concept in tech_concepts[:2]
+                             if concept.lower() not in existing_terms])
         
-        # 如果没有生成任何扩展，添加默认扩展
-        if not extensions:
-            extensions = [
-                "- 相关领域的深入学习",
-                "- 实践应用和案例分析",
-                "- 前沿发展和趋势分析"
-            ]
+        # 4. 从关键主题提取扩展概念
+        key_themes = analysis.get('key_themes', [])
+        for theme in key_themes[:2]:
+            if (theme and theme.lower() not in existing_terms and 
+                len(theme) > 2 and theme not in main_topic):
+                extensions.append(f"- {theme}")
+                existing_terms.add(theme.lower())
         
-        return extensions[:5]  # 最多5个扩展知识点
+        # 5. 基于文档结构提取概念
+        if '配置' in content or 'config' in content_lower:
+            config_concepts = ['环境变量', '配置文件', '参数验证']
+            extensions.extend([f"- {concept}" for concept in config_concepts[:1]
+                             if concept.lower() not in existing_terms])
+        
+        if '测试' in content or 'test' in content_lower:
+            test_concepts = ['集成测试', '端到端测试', '测试覆盖率']
+            extensions.extend([f"- {concept}" for concept in test_concepts[:1]
+                             if concept.lower() not in existing_terms])
+        
+        # 6. 如果扩展概念不够，添加通用相关概念
+        if len(extensions) < 3:
+            general_concepts = []
+            
+            if domain == '计算机科学':
+                general_concepts = ['数据结构', '编程范式', '软件工程', '系统架构']
+            elif domain == '人工智能':
+                general_concepts = ['深度学习', '强化学习', '计算机视觉', '语音识别']
+            else:
+                # 基于主题生成通用概念
+                if main_topic:
+                    general_concepts = [f'{main_topic}原理', f'{main_topic}实现', f'{main_topic}应用']
+                else:
+                    general_concepts = ['技术架构', '实现方案', '最佳实践']
+            
+            extensions.extend([f"- {concept}" for concept in general_concepts[:3-len(extensions)]
+                             if concept.lower() not in existing_terms])
+        
+        return extensions[:5]  # 最多5个扩展概念
     
     def _generate_processing_info(self, analysis: Dict[str, Any]) -> str:
         """生成处理信息"""

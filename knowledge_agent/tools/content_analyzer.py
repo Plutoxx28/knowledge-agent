@@ -113,7 +113,7 @@ class ContentAnalyzer:
 - requires_context: 是否需要额外背景知识理解"""
                         }
                     ],
-                    max_tokens=800,
+                    max_tokens=65535,
                     temperature=0.1
                 )
             )

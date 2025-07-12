@@ -17,7 +17,8 @@
       "Bash(rg:*)",
       "Bash(sed:*)",
       "Bash(python:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "WebFetch(domain:cloud.google.com)"
     ],
     "deny": []
   }
